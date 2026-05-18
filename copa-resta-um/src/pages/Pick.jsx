@@ -1,223 +1,244 @@
-// src/pages/Pick.jsx
 import { useState, useEffect } from 'react'
 import { getPlayerPicks, getMatches, submitPick } from '../lib/supabase'
-import { computeLives, getTeamStatus, validatePick, getFlag, todayBrasilia,
-         toLocalDateISO, isPickOpen, STAGE_TO_PHASE, isEliminated } from '../lib/gameLogic'
+import { computeLives, getTeamStatus, validatePick, todayBrasilia,
+         toLocalDateISO, isPickOpen, STAGE_TO_PHASE } from '../lib/gameLogic'
+import ShieldLives from '../components/ShieldLives'
+import FlagImage from '../components/FlagImage'
+
+function StatusGuide() {
+  return (
+    <div className="card" style={{marginTop:8}}>
+      <div className="card-label">Guia de status</div>
+      <div style={{display:'flex',flexDirection:'column',gap:10}}>
+        {[
+          {cls:'status-available', icon:'🛡️', label:'Disponível',   desc:'Pode escolher este time'},
+          {cls:'status-unlocked',  icon:'🔓', label:'Desbloqueado', desc:'Já usou e venceu — pode reutilizar'},
+          {cls:'status-burned',    icon:'🔥', label:'Queimado',     desc:'Perdeu com este time — indisponível'},
+        ].map(s => (
+          <div key={s.label} style={{display:'flex',alignItems:'center',gap:10}}>
+            <span style={{fontSize:18}}>{s.icon}</span>
+            <div>
+              <div className={`badge ${s.cls}`}>{s.label}</div>
+              <div style={{fontSize:11,color:'var(--n500)',marginTop:2}}>{s.desc}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function Pick({ player }) {
   const [picks, setPicks]       = useState([])
-  const [todayMatches, setTodayMatches] = useState([])
-  const [todayPick, setTodayPick]   = useState(null)
-  const [selected, setSelected]     = useState(null) // {teamId, teamName, matchId}
-  const [loading, setLoading]       = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError]           = useState('')
-  const [done, setDone]             = useState(false)
-
+  const [todayMatches, setTM]   = useState([])
+  const [todayPick, setTP]      = useState(null)
+  const [selected, setSel]      = useState(null)
+  const [loading, setLoading]   = useState(true)
+  const [submitting, setSub]    = useState(false)
+  const [error, setError]       = useState('')
   const today = todayBrasilia()
 
   useEffect(() => { load() }, [player.id])
 
   async function load() {
     setLoading(true)
-    try {
-      const [playerPicks, allMatches] = await Promise.all([
-        getPlayerPicks(player.id),
-        getMatches(),
-      ])
-      setPicks(playerPicks)
-      const dayMatches = allMatches.filter(m => toLocalDateISO(m.utc_date) === today)
-      setTodayMatches(dayMatches)
-      setTodayPick(playerPicks.find(p => p.pick_date === today) || null)
-    } finally { setLoading(false) }
+    const [pp, allMs] = await Promise.all([getPlayerPicks(player.id), getMatches()])
+    setPicks(pp)
+    const dayMs = allMs.filter(m => toLocalDateISO(m.utc_date) === today)
+    setTM(dayMs)
+    setTP(pp.find(p => p.pick_date === today) || null)
+    setLoading(false)
   }
 
-  function handleSelectTeam(teamId, teamName, matchId) {
-    if (selected?.teamId === teamId) { setSelected(null); setError(''); return }
-    const v = validatePick(picks, teamId, teamName, currentPhase, todayMatches[0])
-    if (!v.valid) { setError(v.reason); setSelected(null); return }
+  function handleSelect(teamId, teamName, matchId) {
+    if (selected?.teamId === teamId) { setSel(null); setError(''); return }
+    const phase = STAGE_TO_PHASE[todayMatches[0]?.stage] || 'groups'
+    const v = validatePick(picks, teamId, teamName, phase, todayMatches[0])
+    if (!v.valid) { setError(v.reason); setSel(null); return }
     setError(v.warning || '')
-    setSelected({ teamId, teamName, matchId })
+    setSel({ teamId, teamName, matchId })
   }
 
   async function handleSubmit() {
     if (!selected) return
-    setSubmitting(true); setError('')
+    setSub(true); setError('')
     try {
       const phase = STAGE_TO_PHASE[todayMatches[0]?.stage] || 'groups'
       const alreadyUsed = picks.some(p => p.team_id === selected.teamId && p.phase === phase && p.result !== 'no_pick')
-      await submitPick({
-        playerId: player.id,
-        matchId: selected.matchId,
-        teamName: selected.teamName,
-        teamId: selected.teamId,
-        phase,
-        pickDate: today,
-        isRepeat: alreadyUsed,
-      })
-      setDone(true)
+      await submitPick({ playerId: player.id, matchId: selected.matchId,
+        teamName: selected.teamName, teamId: selected.teamId,
+        phase, pickDate: today, isRepeat: alreadyUsed })
       await load()
-    } catch (e) {
-      setError(e.message.includes('unique') ? 'Você já fez sua pick hoje!' : 'Erro ao enviar pick. Tente novamente.')
-    } finally { setSubmitting(false) }
+    } catch(e) {
+      setError(e.message.includes('unique') ? 'Você já fez sua pick hoje!' : 'Erro ao enviar. Tente novamente.')
+    } finally { setSub(false) }
   }
 
-  if (loading) return <div className="loading">⚽ Carregando...</div>
+  if (loading) return <div className="loading">⏳ Carregando...</div>
 
   const { lives, inKnockout } = computeLives(picks)
-  const currentPhase = inKnockout ? 'knockout' : 'groups'
+  const maxLives = inKnockout ? 3 : 6
   const eliminated = lives <= 0
-
-  if (eliminated) return (
-    <div className="page">
-      <div className="page-title">⚽ Fazer Pick</div>
-      <div className="card"><div className="error-box">💀 Você foi eliminado. Fim de jogo!</div></div>
-    </div>
-  )
-
-  if (todayMatches.length === 0) return (
-    <div className="page">
-      <div className="page-title">⚽ Fazer Pick</div>
-      <div className="card">
-        <div className="text-muted text-center" style={{padding:'20px'}}>
-          😴 Sem jogos hoje.<br/>Volte num dia de jogo!
-        </div>
-      </div>
-    </div>
-  )
-
   const pickOpen = isPickOpen(todayMatches)
 
-  if (todayPick || done) {
-    const pick = todayPick
-    return (
-      <div className="page">
-        <div className="page-title">⚽ Fazer Pick</div>
-        <div className="card">
-          <div className="success-box" style={{fontSize:'16px',textAlign:'center'}}>
-            <div style={{fontSize:'36px',marginBottom:'8px'}}>{getFlag(pick?.team_name || selected?.teamName)}</div>
-            <strong>{pick?.team_name || selected?.teamName}</strong>
-            <div style={{fontSize:'13px',marginTop:'4px',color:'var(--green-dark)'}}>
-              Pick do dia enviada! ✅
-            </div>
-            {pick?.is_repeat && (
-              <div style={{color:'#856404',fontSize:'12px',marginTop:'4px'}}>⚠️ Repetição — custa +1 vida</div>
-            )}
-          </div>
-          <div className="divider"/>
-          <div className="text-muted text-center">Resultado sai após o fim do jogo.</div>
-          <div style={{marginTop:'12px'}}>
-            <div className="card-header">Seus {lives} de {inKnockout?3:6} vidas restantes</div>
-            <div className="lives-display">
-              {Array.from({length: inKnockout?3:6}).map((_,i)=>(
-                <span key={i} className={`life ${i>=lives?'gone':''}`}>❤️</span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+  function kickoff(utcDate) {
+    return new Date(utcDate).toLocaleTimeString('pt-BR',
+      { hour:'2-digit', minute:'2-digit', timeZone:'America/Sao_Paulo' })
   }
+
+  function getStatusInfo(teamId) {
+    const s = getTeamStatus(picks, teamId)
+    if (s === 'burned')   return { cls:'status-burned',    label:'🔥 Queimado' }
+    if (s === 'unlocked') return { cls:'status-unlocked',  label:'🔓 Desbloqueado' }
+    return                       { cls:'status-available', label:'🛡️ Disponível' }
+  }
+
+  // Blocked screen states
+  if (eliminated) return (
+    <div className="page">
+      <div className="page-title">Fazer Pick</div>
+      <div className="card"><div className="alert alert-error">💀 Você foi eliminado. Fim de jogo!</div></div>
+    </div>
+  )
+  if (!todayMatches.length) return (
+    <div className="page">
+      <div className="page-title">Fazer Pick</div>
+      <div className="card empty">😴 Sem jogos hoje.<br/>Volte num dia de jogo!</div>
+    </div>
+  )
+
+  // Already picked or submitted
+  if (todayPick) return (
+    <div className="page">
+      <div className="page-title">Fazer Pick</div>
+      <div className="card" style={{textAlign:'center',padding:'28px 16px'}}>
+        <div style={{marginBottom:12}}>
+          <FlagImage team={todayPick.team_name} size="xl" className="flag-img" style={{margin:'0 auto'}} />
+        </div>
+        <div style={{fontFamily:'Sora',fontSize:22,fontWeight:800,marginBottom:4}}>{todayPick.team_name}</div>
+        <span className="badge badge-locked" style={{fontSize:12}}>✓ Pick Confirmada</span>
+        {todayPick.is_repeat && <div className="alert alert-warn" style={{marginTop:10,textAlign:'left'}}>⚠️ Repetição — +1 vida de custo</div>}
+        <div className="divider"/>
+        <ShieldLives lives={lives} max={maxLives} />
+      </div>
+      <ShowGuide />
+    </div>
+  )
 
   if (!pickOpen) return (
     <div className="page">
-      <div className="page-title">⚽ Fazer Pick</div>
-      <div className="card">
-        <div className="error-box">
-          ⌛ O prazo para hoje fechou — o primeiro jogo já começou.<br/>
-          Você perdeu 1 vida por não enviar a pick.
-        </div>
-      </div>
+      <div className="page-title">Fazer Pick</div>
+      <div className="card"><div className="alert alert-error">⌛ Prazo encerrado — o primeiro jogo já começou.</div></div>
     </div>
   )
 
-  // Format kick-off time
-  function kickoff(utcDate) {
-    return new Date(utcDate).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})
-  }
-
-  // Get team status label
-  function statusLabel(teamId, teamName) {
-    const s = getTeamStatus(picks, teamId)
-    if (s === 'burned')    return { cls:'status-burned',    text:'🔴 Queimada' }
-    if (s === 'unlocked')  return { cls:'status-unlocked',  text:'🔵 Desbloqueada' }
-    return { cls:'status-available', text:'🟢 Disponível' }
-  }
-
   return (
     <div className="page">
-      <div className="page-title">⚽ Pick do Dia</div>
+      <div className="page-title">Fazer Pick</div>
 
-      <div className="card">
-        <div className="card-header">Vidas restantes</div>
-        <div className="lives-display">
-          {Array.from({length: inKnockout?3:6}).map((_,i)=>(
-            <span key={i} className={`life ${i>=lives?'gone':''}`}>❤️</span>
-          ))}
-          <span className="lives-label">{lives} vida{lives!==1?'s':''}</span>
-        </div>
+      {/* Lives */}
+      <div className="card-dark" style={{marginBottom:12}}>
+        <div className="sora-sm" style={{color:'rgba(255,255,255,.5)',marginBottom:8}}>Vidas restantes</div>
+        <ShieldLives lives={lives} max={maxLives} />
       </div>
 
-      <div className="card">
-        <div className="card-header">Jogos de hoje — escolha 1 time para vencer</div>
+      {/* Instruction */}
+      <div style={{fontFamily:'Sora',fontSize:11,fontWeight:700,letterSpacing:'.08em',
+        textTransform:'uppercase',color:'var(--n500)',marginBottom:12}}>
+        Escolha 1 time para vencer
+      </div>
 
-        {todayMatches.map(match => {
-          const homeStatus = statusLabel(match.home_team_id, match.home_team)
-          const awayStatus = statusLabel(match.away_team_id, match.away_team)
-          const homeBurned = getTeamStatus(picks, match.home_team_id) === 'burned'
-          const awayBurned = getTeamStatus(picks, match.away_team_id) === 'burned'
-
-          return (
-            <div key={match.id} style={{marginBottom:'16px'}}>
-              <div style={{fontSize:'12px',color:'var(--gray-dark)',marginBottom:'8px',textAlign:'center'}}>
-                {match.group_name ? `Grupo ${match.group_name.replace('GROUP_','')} · ` : ''}
-                ⏱ {kickoff(match.utc_date)}
-              </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:'8px',alignItems:'center'}}>
-                {/* Home team */}
-                <button
-                  className={`team-btn ${selected?.teamId===match.home_team_id?'selected':''} ${homeBurned?'burned':''}`}
-                  disabled={homeBurned}
-                  onClick={() => handleSelectTeam(match.home_team_id, match.home_team, match.id)}>
-                  <span style={{fontSize:'36px'}}>{getFlag(match.home_team)}</span>
-                  <span style={{fontSize:'13px',fontWeight:600}}>{match.home_team}</span>
-                  <span style={{fontSize:'10px'}} className={homeStatus.cls}>{homeStatus.text}</span>
-                </button>
-
-                <span className="vs-badge">VS</span>
-
-                {/* Away team */}
-                <button
-                  className={`team-btn ${selected?.teamId===match.away_team_id?'selected':''} ${awayBurned?'burned':''}`}
-                  disabled={awayBurned}
-                  onClick={() => handleSelectTeam(match.away_team_id, match.away_team, match.id)}>
-                  <span style={{fontSize:'36px'}}>{getFlag(match.away_team)}</span>
-                  <span style={{fontSize:'13px',fontWeight:600}}>{match.away_team}</span>
-                  <span style={{fontSize:'10px'}} className={awayStatus.cls}>{awayStatus.text}</span>
-                </button>
-              </div>
+      {/* Match cards */}
+      {todayMatches.map(match => {
+        const homeInfo = getStatusInfo(match.home_team_id)
+        const awayInfo = getStatusInfo(match.away_team_id)
+        const homeBurned = getTeamStatus(picks, match.home_team_id) === 'burned'
+        const awayBurned = getTeamStatus(picks, match.away_team_id) === 'burned'
+        return (
+          <div key={match.id} className="card" style={{padding:'20px 16px'}}>
+            <div style={{fontSize:11,color:'var(--n400)',textAlign:'center',marginBottom:14,fontFamily:'Sora',fontWeight:600,letterSpacing:'.04em'}}>
+              {match.group_name ? `Grupo ${match.group_name.replace('GROUP_','')} · ` : ''}
+              {kickoff(match.utc_date)} BRT
             </div>
-          )
-        })}
-      </div>
+            <div className="match-row">
+              {/* Home */}
+              <button
+                onClick={() => !homeBurned && handleSelect(match.home_team_id, match.home_team, match.id)}
+                style={{background:'none',border:'none',padding:0,cursor:homeBurned?'not-allowed':'pointer'}}
+                disabled={homeBurned}>
+                <div style={{
+                  display:'flex',flexDirection:'column',alignItems:'center',gap:8,
+                  padding:'12px 8px',borderRadius:12,transition:'background .15s',
+                  background: selected?.teamId === match.home_team_id ? 'var(--gold-light)' : 'transparent',
+                  border: selected?.teamId === match.home_team_id ? '2px solid var(--gold)' : '2px solid transparent',
+                }}>
+                  <FlagImage team={match.home_team} size="lg" grayscale={homeBurned} />
+                  <div style={{fontFamily:'Sora',fontSize:11,fontWeight:700,textTransform:'uppercase',
+                    letterSpacing:'.04em',textAlign:'center'}}>{match.home_team}</div>
+                  <span className={`match-status-badge ${homeInfo.cls}`}>{homeInfo.label}</span>
+                </div>
+              </button>
 
-      {error && <div className={error.includes('⚠️') ? 'warning' : 'error-box'}>{error}</div>}
+              {/* Center */}
+              <div className="match-center">
+                <div className="match-vs">VS</div>
+                <div className="match-time">{kickoff(match.utc_date)}</div>
+              </div>
 
+              {/* Away */}
+              <button
+                onClick={() => !awayBurned && handleSelect(match.away_team_id, match.away_team, match.id)}
+                style={{background:'none',border:'none',padding:0,cursor:awayBurned?'not-allowed':'pointer'}}
+                disabled={awayBurned}>
+                <div style={{
+                  display:'flex',flexDirection:'column',alignItems:'center',gap:8,
+                  padding:'12px 8px',borderRadius:12,transition:'background .15s',
+                  background: selected?.teamId === match.away_team_id ? 'var(--gold-light)' : 'transparent',
+                  border: selected?.teamId === match.away_team_id ? '2px solid var(--gold)' : '2px solid transparent',
+                }}>
+                  <FlagImage team={match.away_team} size="lg" grayscale={awayBurned} />
+                  <div style={{fontFamily:'Sora',fontSize:11,fontWeight:700,textTransform:'uppercase',
+                    letterSpacing:'.04em',textAlign:'center'}}>{match.away_team}</div>
+                  <span className={`match-status-badge ${awayInfo.cls}`}>{awayInfo.label}</span>
+                </div>
+              </button>
+            </div>
+          </div>
+        )
+      })}
+
+      {error && <div className={error.includes('⚠️') ? 'alert alert-warn' : 'alert alert-error'}>{error}</div>}
+
+      {/* Selected preview */}
       {selected && (
-        <div className="card" style={{textAlign:'center',background:'var(--gold-light)',border:'2px solid var(--gold)'}}>
-          <div style={{fontSize:'40px'}}>{getFlag(selected.teamName)}</div>
-          <div style={{fontWeight:700,fontSize:'18px',marginBottom:'4px'}}>{selected.teamName}</div>
-          <div style={{fontSize:'12px',color:'var(--gray-dark)'}}>Pick selecionada</div>
+        <div className="card" style={{background:'var(--gold-light)',border:'1.5px solid var(--gold)',textAlign:'center',padding:'16px'}}>
+          <div style={{fontSize:12,color:'var(--gold-dark)',fontFamily:'Sora',fontWeight:700,marginBottom:8}}>SUA PICK</div>
+          <FlagImage team={selected.teamName} size="lg" style={{margin:'0 auto 8px'}} />
+          <div style={{fontFamily:'Sora',fontWeight:800,fontSize:18}}>{selected.teamName}</div>
         </div>
       )}
 
-      <button className="btn-primary" onClick={handleSubmit} disabled={!selected || submitting}>
-        {submitting ? '⏳ Enviando...' : selected ? `✅ Confirmar — ${selected.teamName}` : 'Selecione um time acima'}
+      <button className="btn btn-primary" onClick={handleSubmit} disabled={!selected || submitting} style={{marginTop:4}}>
+        {submitting ? '⏳ Enviando...' : selected ? `Confirmar — ${selected.teamName}` : 'Selecione um time acima'}
       </button>
 
-      <div className="text-muted text-center mt8" style={{fontSize:'12px'}}>
-        Empate = pick desperdiçada (sem vida). Derrota = −1 vida. Sem pick = −1 vida.
+      <div style={{fontSize:11,color:'var(--n400)',textAlign:'center',marginTop:8,lineHeight:1.4}}>
+        Picks são finais e não podem ser alteradas.
       </div>
+
+      <ShowGuide />
+    </div>
+  )
+}
+
+function ShowGuide() {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{marginTop:8}}>
+      <button onClick={()=>setShow(!show)} className="btn btn-ghost" style={{fontSize:12}}>
+        {show ? '▲ Ocultar guia' : '▼ Ver guia de status'}
+      </button>
+      {show && <StatusGuide />}
     </div>
   )
 }
