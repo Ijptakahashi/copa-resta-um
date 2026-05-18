@@ -1,16 +1,43 @@
-// src/lib/supabase.js
 import { createClient } from '@supabase/supabase-js'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
-
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-// ─── Players ──────────────────────────────────────────────────
+// ─── Auth helpers ─────────────────────────────────────────────
+async function hashPassword(password) {
+  const data = new TextEncoder().encode(password)
+  const buf  = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('')
+}
+
 export async function getPlayers() {
   const { data, error } = await supabase.from('players').select('*').order('name')
   if (error) throw error
   return data
+}
+
+export async function registerPlayer(name, password, avatar) {
+  const password_hash = await hashPassword(password)
+  const { data, error } = await supabase
+    .from('players').insert({ name, password_hash, avatar }).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function loginPlayer(name, password) {
+  const { data, error } = await supabase
+    .from('players').select('*').eq('name', name).single()
+  if (error) throw new Error('Jogador não encontrado.')
+  const hash = await hashPassword(password)
+  if (data.password_hash && data.password_hash !== hash)
+    throw new Error('Senha incorreta.')
+  return data
+}
+
+export async function updatePlayerAvatar(playerId, avatar) {
+  const { error } = await supabase.from('players').update({ avatar }).eq('id', playerId)
+  if (error) throw error
 }
 
 export async function addPlayer(name) {
@@ -32,15 +59,11 @@ export async function upsertMatches(matches) {
 }
 
 export async function getTodayMatches(today) {
-  const start = `${today}T00:00:00.000Z`
-  const end   = `${today}T23:59:59.999Z`
-  // Use Brasilia offset: today in Brasilia = UTC+0..UTC-5 range
-  // Simpler: fetch by date substring after converting
   const { data, error } = await supabase
     .from('matches')
     .select('*')
-    .gte('utc_date', new Date(today + 'T03:00:00Z').toISOString()) // midnight Brasilia = 03:00 UTC
-    .lte('utc_date', new Date(today + 'T26:59:59Z').toISOString()) // 23:59 Brasilia = next day 02:59 UTC
+    .gte('utc_date', new Date(today + 'T03:00:00Z').toISOString())
+    .lte('utc_date', new Date(today + 'T26:59:59Z').toISOString())
     .order('utc_date')
   if (error) throw error
   return data
@@ -49,49 +72,49 @@ export async function getTodayMatches(today) {
 // ─── Picks ────────────────────────────────────────────────────
 export async function getPlayerPicks(playerId) {
   const { data, error } = await supabase
-    .from('picks')
-    .select('*, match:matches(*)')
-    .eq('player_id', playerId)
-    .order('pick_date')
+    .from('picks').select('*, match:matches(*)').eq('player_id', playerId).order('pick_date')
   if (error) throw error
   return data
 }
 
 export async function getAllPicks(date) {
-  let query = supabase
-    .from('picks')
-    .select('*, player:players(*), match:matches(*)')
-    .order('pick_date', { ascending: false })
-  if (date) query = query.eq('pick_date', date)
-  const { data, error } = await query
+  let q = supabase.from('picks').select('*, player:players(*), match:matches(*)').order('pick_date', { ascending: false })
+  if (date) q = q.eq('pick_date', date)
+  const { data, error } = await q
   if (error) throw error
   return data
 }
 
 export async function submitPick({ playerId, matchId, teamName, teamId, phase, pickDate, isRepeat }) {
-  const { data, error } = await supabase
-    .from('picks')
+  const { data, error } = await supabase.from('picks')
     .insert({ player_id: playerId, match_id: matchId, team_name: teamName,
               team_id: teamId, phase, pick_date: pickDate, is_repeat: isRepeat })
-    .select()
-    .single()
+    .select().single()
   if (error) throw error
   return data
 }
 
 export async function updatePickResult(pickId, result, livesLost) {
-  const { error } = await supabase
-    .from('picks')
-    .update({ result, lives_lost: livesLost })
-    .eq('id', pickId)
+  const { error } = await supabase.from('picks').update({ result, lives_lost: livesLost }).eq('id', pickId)
   if (error) throw error
 }
 
-export async function getPicksForDate(date) {
+// ─── Chat ─────────────────────────────────────────────────────
+export async function getMessages(limit = 60) {
   const { data, error } = await supabase
-    .from('picks')
-    .select('*, player:players(*)')
-    .eq('pick_date', date)
+    .from('messages').select('*').order('created_at', { ascending: false }).limit(limit)
   if (error) throw error
-  return data
+  return data.reverse()
+}
+
+export async function sendMessage(playerId, playerName, playerAvatar, content) {
+  const { error } = await supabase.from('messages')
+    .insert({ player_id: playerId, player_name: playerName, player_avatar: playerAvatar, content })
+  if (error) throw error
+}
+
+export function subscribeToMessages(callback) {
+  return supabase.channel('messages')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, callback)
+    .subscribe()
 }
