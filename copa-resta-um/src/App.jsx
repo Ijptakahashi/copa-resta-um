@@ -1,13 +1,19 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Pick from './pages/Pick'
 import Calendar from './pages/Calendar'
+import Rankings from './pages/Rankings'
+import Profile from './pages/Profile'
 import Chat from './pages/Chat'
-import { Rankings, AllPicks, Inventory } from './pages/OtherPages'
 import Navbar from './components/Navbar'
 import './index.css'
+
+function ProfileById({ player }) {
+  const { id } = useParams()
+  return <Profile player={player} viewPlayerId={id} />
+}
 
 export default function App() {
   const [player, setPlayer] = useState(() => {
@@ -21,15 +27,15 @@ export default function App() {
       <Navbar player={player} onLogout={() => setPlayer(null)} />
       <main>
         <Routes>
-          <Route path="/"           element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard"  element={<Dashboard player={player} />} />
-          <Route path="/pick"       element={<Pick player={player} />} />
-          <Route path="/calendar"   element={<Calendar />} />
-          <Route path="/rankings"   element={<Rankings player={player} />} />
-          <Route path="/all-picks"  element={<AllPicks player={player} />} />
-          <Route path="/inventory"  element={<Inventory player={player} />} />
-          <Route path="/chat"       element={<Chat player={player} />} />
-          <Route path="*"           element={<Navigate to="/dashboard" replace />} />
+          <Route path="/"            element={<Navigate to="/pick" replace />} />
+          <Route path="/pick"        element={<Pick player={player} />} />
+          <Route path="/calendar"    element={<Calendar />} />
+          <Route path="/rankings"    element={<Rankings player={player} />} />
+          <Route path="/profile"     element={<Profile player={player} />} />
+          <Route path="/profile/:id" element={<ProfileById player={player} />} />
+          <Route path="/chat"        element={<Chat player={player} />} />
+          <Route path="/dashboard"   element={<Navigate to="/pick" replace />} />
+          <Route path="*"            element={<Navigate to="/pick" replace />} />
         </Routes>
       </main>
     </BrowserRouter>
