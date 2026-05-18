@@ -27,6 +27,26 @@ export const STARTING_LIVES = { groups: 6, knockout: 3 }
 
 // Flag emoji lookup
 export const FLAG = {
+  // English names (from openfootball/ESPN)
+  'Mexico': '🇲🇽', 'South Africa': '🇿🇦', 'South Korea': '🇰🇷',
+  'Czech Republic': '🇨🇿', 'Czechia': '🇨🇿',
+  'Canada': '🇨🇦', 'Bosnia and Herzegovina': '🇧🇦', 'Bosnia': '🇧🇦',
+  'Qatar': '🇶🇦', 'Switzerland': '🇨🇭',
+  'Brazil': '🇧🇷', 'Morocco': '🇲🇦', 'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Haiti': '🇭🇹',
+  'United States': '🇺🇸', 'Paraguay': '🇵🇾',
+  'Australia': '🇦🇺', 'Turkey': '🇹🇷',
+  'Germany': '🇩🇪', 'Ecuador': '🇪🇨',
+  "Côte d'Ivoire": '🇨🇮', 'Ivory Coast': '🇨🇮', 'Cote d\'Ivoire': '🇨🇮', 'Curacao': '🇨🇼',
+  'Netherlands': '🇳🇱', 'Japan': '🇯🇵', 'Sweden': '🇸🇪', 'Tunisia': '🇹🇳',
+  'Belgium': '🇧🇪', 'Egypt': '🇪🇬', 'Iran': '🇮🇷', 'New Zealand': '🇳🇿',
+  'Spain': '🇪🇸', 'Cape Verde': '🇨🇻', 'Saudi Arabia': '🇸🇦', 'Uruguay': '🇺🇾',
+  'France': '🇫🇷', 'Senegal': '🇸🇳', 'Iraq': '🇮🇶', 'Norway': '🇳🇴',
+  'Argentina': '🇦🇷', 'Algeria': '🇩🇿', 'Austria': '🇦🇹', 'Jordan': '🇯🇴',
+  'Portugal': '🇵🇹', 'DR Congo': '🇨🇩', 'Congo DR': '🇨🇩', 'Uzbekistan': '🇺🇿',
+  'Colombia': '🇨🇴', 'England': '🏴󠁧󠁢󠁥󠁮󠁧󁿢', 'Croatia': '🇭🇷',
+  'Panama': '🇵🇦', 'Ghana': '🇬🇭', 'Norway': '🇳🇴', 'Sweden': '🇸🇪',
+  'Senegal': '🇸🇳', 'Honduras': '🇭🇳', 'Costa Rica': '🇨🇷', 'Jamaica': '🇯🇲',
+  'New Zealand': '🇳🇿', 'Mali': '🇲🇱',
   'Brazil': '🇧🇷', 'Brasil': '🇧🇷',
   'Argentina': '🇦🇷', 'France': '🇫🇷', 'França': '🇫🇷',
   'Germany': '🇩🇪', 'Alemanha': '🇩🇪',
