@@ -1,0 +1,232 @@
+/* ============================================================
+   Copa Resta Um — Global Styles
+   ============================================================ */
+
+:root {
+  --green-dark:  #0A3622;
+  --green-mid:   #1A6B3C;
+  --green-light: #D4EDDA;
+  --gold:        #C9A84C;
+  --gold-light:  #FFF8E7;
+  --red:         #C0392B;
+  --red-light:   #FCEBEB;
+  --blue:        #1A5FAB;
+  --blue-light:  #E6F1FB;
+  --gray:        #F7F7F5;
+  --gray-mid:    #E0DED8;
+  --gray-dark:   #6B6B6B;
+  --text:        #1A1A18;
+  --white:       #FFFFFF;
+  --radius:      12px;
+  --shadow:      0 2px 12px rgba(0,0,0,0.08);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--gray);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+#root { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* ── Navbar ── */
+.navbar {
+  background: var(--green-dark);
+  color: var(--white);
+  padding: 0 16px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.navbar-brand { font-size: 18px; font-weight: 700; color: var(--gold); }
+.navbar-player { font-size: 13px; color: rgba(255,255,255,0.8); }
+.navbar-logout { background: none; border: 1px solid rgba(255,255,255,0.3);
+  color: var(--white); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.navbar-logout:hover { background: rgba(255,255,255,0.1); }
+
+/* ── Bottom nav ── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--green-dark);
+  display: flex; border-top: 1px solid rgba(255,255,255,0.1);
+  z-index: 100;
+}
+.bottom-nav a {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  padding: 8px 4px; text-decoration: none; color: rgba(255,255,255,0.5);
+  font-size: 10px; gap: 2px; transition: color 0.15s;
+}
+.bottom-nav a.active { color: var(--gold); }
+.bottom-nav a span.icon { font-size: 20px; }
+
+/* ── Page wrapper ── */
+.page { padding: 16px 16px 80px; max-width: 480px; margin: 0 auto; }
+.page-title { font-size: 20px; font-weight: 700; margin-bottom: 16px; color: var(--green-dark); }
+
+/* ── Cards ── */
+.card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 12px;
+}
+.card-header { font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.06em; color: var(--gray-dark); margin-bottom: 8px; }
+
+/* ── Lives display ── */
+.lives-display { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.life { font-size: 22px; transition: opacity 0.2s; }
+.life.gone { opacity: 0.15; }
+.lives-label { font-size: 13px; color: var(--gray-dark); margin-left: 4px; }
+
+/* ── Status badges ── */
+.badge {
+  display: inline-block; padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.badge-alive  { background: var(--green-light); color: var(--green-dark); }
+.badge-dead   { background: var(--red-light);   color: var(--red); }
+.badge-gold   { background: var(--gold-light);  color: #7A5200; }
+.badge-open   { background: var(--blue-light);  color: var(--blue); }
+.badge-closed { background: var(--gray-mid);    color: var(--gray-dark); }
+
+/* ── Match card / team selection ── */
+.match-card {
+  border: 2px solid var(--gray-mid);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 10px;
+  background: var(--white);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.match-card:hover { border-color: var(--green-mid); }
+.match-card.selected { border-color: var(--gold); background: var(--gold-light); }
+.match-teams { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.team-option { flex: 1; text-align: center; }
+.team-flag { font-size: 32px; display: block; margin-bottom: 4px; }
+.team-name { font-size: 13px; font-weight: 600; }
+.team-status { font-size: 10px; margin-top: 2px; }
+.status-available { color: var(--green-mid); }
+.status-unlocked  { color: var(--blue); }
+.status-burned    { color: var(--red); }
+.vs-badge { font-size: 11px; font-weight: 700; color: var(--gray-dark); }
+
+.team-btn {
+  width: 100%; padding: 12px; border: 2px solid var(--gray-mid);
+  border-radius: 10px; background: var(--white); cursor: pointer;
+  transition: all 0.15s; display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.team-btn:hover:not(:disabled) { border-color: var(--green-mid); background: var(--green-light); }
+.team-btn.selected { border-color: var(--gold); background: var(--gold-light); }
+.team-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.team-btn.burned { border-color: var(--red-light); background: var(--red-light); }
+
+/* ── Warning box ── */
+.warning { background: #FFF3CD; border: 1px solid #FFEEBA; border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; color: #856404; margin: 10px 0; }
+.error-box { background: var(--red-light); border-radius: 8px;
+  padding: 10px 14px; font-size: 13px; color: var(--red); margin: 10px 0; }
+.success-box { background: var(--green-light); border-radius: 8px;
+  padding: 12px 14px; font-size: 14px; color: var(--green-dark); margin: 10px 0; }
+
+/* ── Primary button ── */
+.btn-primary {
+  width: 100%; padding: 14px; background: var(--green-dark); color: var(--white);
+  border: none; border-radius: var(--radius); font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: background 0.15s; margin-top: 8px;
+}
+.btn-primary:hover:not(:disabled) { background: var(--green-mid); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  width: 100%; padding: 12px; background: var(--white); color: var(--green-dark);
+  border: 2px solid var(--green-dark); border-radius: var(--radius); font-size: 14px;
+  font-weight: 600; cursor: pointer; transition: all 0.15s; margin-top: 8px;
+}
+.btn-secondary:hover { background: var(--green-light); }
+.btn-gold {
+  width: 100%; padding: 14px; background: var(--gold); color: var(--green-dark);
+  border: none; border-radius: var(--radius); font-size: 16px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.btn-gold:hover:not(:disabled) { opacity: 0.85; }
+.btn-gold:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Ranking table ── */
+.rank-table { width: 100%; border-collapse: collapse; }
+.rank-table th { font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--gray-dark); padding: 8px 6px; border-bottom: 2px solid var(--gray-mid); }
+.rank-table td { padding: 10px 6px; border-bottom: 1px solid var(--gray-mid); font-size: 14px; }
+.rank-table tr.eliminated td { color: var(--red); background: var(--red-light); }
+.rank-table tr.top1 td { font-weight: 700; }
+.rank-pos { font-weight: 700; font-size: 16px; text-align: center; }
+.rank-pos.gold { color: #B8860B; }
+.rank-pos.silver { color: #7A7A7A; }
+.rank-pos.bronze { color: #8B4513; }
+
+/* ── Login screen ── */
+.login-page {
+  min-height: 100vh;
+  background: linear-gradient(160deg, var(--green-dark) 0%, #1A5220 50%, #0A3622 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-logo { font-size: 64px; margin-bottom: 8px; }
+.login-title { font-size: 28px; font-weight: 800; color: var(--gold); text-align: center; margin-bottom: 4px; }
+.login-sub { font-size: 14px; color: rgba(255,255,255,0.7); text-align: center; margin-bottom: 32px; }
+.login-card { background: var(--white); border-radius: 16px; padding: 24px; width: 100%; max-width: 380px; }
+.login-card h2 { font-size: 16px; font-weight: 700; color: var(--green-dark); margin-bottom: 16px; }
+.player-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.player-btn {
+  padding: 12px 8px; border: 2px solid var(--gray-mid); border-radius: 10px;
+  background: var(--white); cursor: pointer; font-size: 14px; font-weight: 600;
+  color: var(--green-dark); transition: all 0.15s; text-align: center;
+}
+.player-btn:hover { border-color: var(--green-mid); background: var(--green-light); }
+.player-btn.selected { border-color: var(--gold); background: var(--gold-light); }
+.new-player-input {
+  width: 100%; padding: 10px 14px; border: 2px solid var(--gray-mid);
+  border-radius: 10px; font-size: 14px; margin-top: 8px; outline: none;
+  transition: border-color 0.15s;
+}
+.new-player-input:focus { border-color: var(--green-mid); }
+
+/* ── Inventory grid ── */
+.inventory-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.inv-item {
+  border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 600;
+}
+.inv-available { background: var(--gray); color: var(--text); }
+.inv-unlocked  { background: var(--green-light); color: var(--green-dark); }
+.inv-burned    { background: var(--red-light); color: var(--red); text-decoration: line-through; }
+
+/* ── Pick result chip ── */
+.result-chip { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+.result-win  { background: var(--green-light); color: var(--green-dark); }
+.result-draw { background: var(--blue-light);  color: var(--blue); }
+.result-loss { background: var(--red-light);   color: var(--red); }
+.result-nopick { background: var(--gray-mid);  color: var(--gray-dark); }
+.result-pending { background: #FFF3CD; color: #856404; }
+
+/* ── Misc ── */
+.divider { height: 1px; background: var(--gray-mid); margin: 16px 0; }
+.text-center { text-align: center; }
+.text-muted { color: var(--gray-dark); font-size: 13px; }
+.mt8 { margin-top: 8px; } .mt16 { margin-top: 16px; } .mb8 { margin-bottom: 8px; }
+.loading { text-align: center; padding: 40px; color: var(--gray-dark); font-size: 18px; }
+.stat-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--gray-mid); font-size: 14px; }
+.stat-row:last-child { border-bottom: none; }
+.stat-value { font-weight: 700; color: var(--green-dark); }
