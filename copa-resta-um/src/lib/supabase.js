@@ -118,3 +118,18 @@ export function subscribeToMessages(callback) {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, callback)
     .subscribe()
 }
+
+// ─── Profile photo ────────────────────────────────────────────
+export async function uploadAvatar(playerId, file) {
+  const ext  = file.name.split('.').pop()
+  const path = `${playerId}.${ext}`
+  const { error: upErr } = await supabase.storage
+    .from('avatars').upload(path, file, { upsert: true, contentType: file.type })
+  if (upErr) throw upErr
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+  const url = data.publicUrl
+  const { error: dbErr } = await supabase.from('players')
+    .update({ avatar_url: url }).eq('id', playerId)
+  if (dbErr) throw dbErr
+  return url
+}
