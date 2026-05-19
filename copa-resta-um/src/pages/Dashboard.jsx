@@ -5,7 +5,7 @@ import { getPlayerPicks, getMatches, getAllPicks, getPlayers } from '../lib/supa
 import { computeLives, todayBrasilia, toLocalDateISO, STAGE_TO_PHASE } from '../lib/gameLogic'
 import { syncMatches, syncResults, processNoPicks } from '../lib/football'
 import ShieldLives from '../components/ShieldLives'
-import FlagImage from '../components/FlagImage'
+import FlagImage, { countryCode } from '../components/FlagImage'
 
 function Countdown({ target }) {
   const [t, setT] = useState({h:'--',m:'--',s:'--'})
@@ -228,11 +228,11 @@ export default function Dashboard({ player }) {
           </div>
           <Countdown target={nextMatch.utc_date}/>
           <div style={{display:'flex',alignItems:'center',gap:8,marginTop:12}}>
-            <FlagImage team={nextMatch.home_team} size="sm"/>
+            {countryCode(nextMatch.home_team)&&<img src={`https://flagcdn.com/w40/${countryCode(nextMatch.home_team)}.png`} width={28} height={20} style={{borderRadius:3,border:'1px solid rgba(0,0,0,.08)'}} alt=""/>}
             <span style={{fontFamily:'Sora',fontWeight:600,fontSize:12}}>{nextMatch.home_team}</span>
             <span style={{fontSize:11,color:'#9CA3AF',fontFamily:'Sora',fontWeight:600}}>vs</span>
             <span style={{fontFamily:'Sora',fontWeight:600,fontSize:12}}>{nextMatch.away_team}</span>
-            <FlagImage team={nextMatch.away_team} size="sm"/>
+            {countryCode(nextMatch.away_team)&&<img src={`https://flagcdn.com/w40/${countryCode(nextMatch.away_team)}.png`} width={28} height={20} style={{borderRadius:3,border:'1px solid rgba(0,0,0,.08)'}} alt=""/>}
           </div>
         </div>
       )}
