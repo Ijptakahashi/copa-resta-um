@@ -5,15 +5,18 @@ import { computeLives } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 
+// Exactly 48 Copa 2026 teams (12 groups × 4)
 const ALL_TEAMS = [
-  'Algeria','Argentina','Australia','Austria','Belgium',
-  'Bosnia and Herzegovina','Brazil','Canada','Cape Verde','Colombia',
-  'Costa Rica','Croatia','Curacao','Czech Republic','DR Congo',
-  'Ecuador','Egypt','England','France','Germany','Ghana','Haiti',
-  'Honduras','Iran','Iraq','Ivory Coast','Jamaica','Japan','Jordan',
-  'Mexico','Morocco','Netherlands','New Zealand','Nigeria','Norway',
-  'Panama','Paraguay','Portugal','Qatar','Saudi Arabia','Scotland',
-  'Senegal','South Africa','South Korea','Spain','Sweden','Switzerland',
+  'Algeria','Argentina','Australia','Austria',
+  'Belgium','Bosnia and Herzegovina','Brazil',
+  'Canada','Cape Verde','Colombia','Croatia','Curacao',
+  'Czech Republic','DR Congo','Ecuador','Egypt','England',
+  'France','Germany','Ghana','Haiti',
+  'Iran','Iraq','Ivory Coast','Japan','Jordan',
+  'Mexico','Morocco','Netherlands','New Zealand',
+  'Norway','Panama','Paraguay','Portugal',
+  'Qatar','Saudi Arabia','Scotland','Senegal',
+  'South Africa','South Korea','Spain','Sweden','Switzerland',
   'Tunisia','Turkey','United States','Uruguay','Uzbekistan',
 ].sort()
 
