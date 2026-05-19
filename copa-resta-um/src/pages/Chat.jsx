@@ -1,102 +1,168 @@
 import { useState, useEffect, useRef } from 'react'
-import { getMessages, sendMessage, subscribeToMessages } from '../lib/supabase'
+import { ArrowLeft, Send, Paperclip } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { getMessages, sendMessage, subscribeToMessages, getPlayers } from '../lib/supabase'
 
 export default function Chat({ player }) {
-  const [messages, setMessages] = useState([])
-  const [text, setText]         = useState('')
-  const [loading, setLoading]   = useState(true)
-  const [sending, setSending]   = useState(false)
-  const bottomRef               = useRef(null)
+  const navigate   = useNavigate()
+  const [msgs,setMsgs]   = useState([])
+  const [text,setText]   = useState('')
+  const [loading,setLoad]= useState(true)
+  const [sending,setSend]= useState(false)
+  const [online,setOnline]= useState(0)
+  const bottomRef         = useRef(null)
 
-  useEffect(() => {
-    getMessages().then(msgs => { setMessages(msgs); setLoading(false) })
-    const ch = subscribeToMessages(p => setMessages(prev => [...prev, p.new]))
-    return () => ch.unsubscribe()
-  }, [])
+  useEffect(()=>{
+    getMessages().then(m=>{setMsgs(m);setLoad(false)})
+    getPlayers().then(p=>setOnline(p.length))
+    const ch=subscribeToMessages(p=>setMsgs(prev=>[...prev,p.new]))
+    return()=>ch.unsubscribe()
+  },[])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[msgs])
 
-  async function handleSend() {
-    const content = text.trim()
-    if (!content || sending) return
-    setSending(true); setText('')
-    try { await sendMessage(player.id, player.name, player.avatar||'⚽', content) }
-    catch { setText(content) } finally { setSending(false) }
+  async function handleSend(){
+    const content=text.trim()
+    if(!content||sending) return
+    setSend(true); setText('')
+    try{ await sendMessage(player.id,player.name,player.avatar||'⚽',content) }
+    catch{ setText(content) } finally{ setSend(false) }
   }
 
-  function formatTime(ts) {
+  function fmtTime(ts){
     return new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
   }
 
-  if (loading) return <div className="loading">💬 Carregando...</div>
+  // Group by date
+  let lastDate=''
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100svh - 56px - 56px)',maxWidth:480,margin:'0 auto'}}>
-      {/* Header */}
-      <div style={{padding:'12px 16px',background:'var(--bg-card)',
-        borderBottom:'1px solid var(--n200)',display:'flex',alignItems:'center',gap:10}}>
-        <div style={{width:36,height:36,borderRadius:'50%',background:'var(--g100)',
-          display:'flex',alignItems:'center',justifyContent:'center',fontSize:18}}>💬</div>
-        <div>
-          <div style={{fontFamily:'Sora',fontWeight:700,fontSize:14}}>Chat do Grupo</div>
-          <div style={{fontSize:11,color:'var(--n400)'}}>Copa Resta Um 2026</div>
+    <div style={{display:'flex',flexDirection:'column',height:'calc(100svh - 54px - 56px)',
+      maxWidth:430,margin:'0 auto',background:'#F8F4EE'}}>
+
+      {/* Chat header */}
+      <div style={{background:'#fff',padding:'12px 16px',
+        borderBottom:'1px solid rgba(0,0,0,.07)',
+        display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
+        <div style={{fontFamily:'Sora',fontWeight:800,fontSize:18,color:'#1A3D28',
+          letterSpacing:'-.3px'}}>GROUP CHAT</div>
+        <div style={{display:'flex',alignItems:'center',gap:5,fontSize:12,
+          color:'#1A3D28',fontFamily:'Inter',fontWeight:500}}>
+          <div style={{width:8,height:8,borderRadius:'50%',background:'#22C55E'}}/>
+          {online} online
         </div>
       </div>
 
+      {/* Date separator line */}
+      {loading&&(
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid #E8E3DB',
+            borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
+          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+
       {/* Messages */}
-      <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',
-        flexDirection:'column',gap:10,background:'var(--bg)'}}>
-        {messages.length===0 && (
-          <div className="empty" style={{marginTop:60}}>
-            <div style={{fontSize:40,marginBottom:8}}>💬</div>
-            Seja o primeiro a mandar uma mensagem!
-          </div>
-        )}
-        {messages.map(msg => {
-          const isMe = msg.player_id === player.id
-          return (
-            <div key={msg.id} style={{display:'flex',flexDirection:isMe?'row-reverse':'row',gap:8,alignItems:'flex-end'}}>
-              <span style={{fontSize:22,flexShrink:0}}>{msg.player_avatar||'⚽'}</span>
-              <div style={{maxWidth:'75%'}}>
-                {!isMe && <div style={{fontFamily:'Sora',fontSize:10,fontWeight:700,color:'var(--n400)',
-                  marginBottom:3,marginLeft:4,letterSpacing:'.04em',textTransform:'uppercase'}}>
-                  {msg.player_name}
-                </div>}
-                <div style={{padding:'10px 14px',borderRadius:isMe?'18px 18px 4px 18px':'18px 18px 18px 4px',
-                  background:isMe?'var(--g800)':'var(--bg-card)',
-                  color:isMe?'white':'var(--n900)',
-                  boxShadow:'var(--shadow-sm)',fontSize:14,lineHeight:1.45}}>
-                  {msg.content}
-                </div>
-                <div style={{fontSize:10,color:'var(--n400)',marginTop:3,
-                  textAlign:isMe?'right':'left',paddingLeft:4,paddingRight:4}}>
-                  {formatTime(msg.created_at)}
+      {!loading&&(
+        <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',
+          flexDirection:'column',gap:16}}>
+          {msgs.length===0&&(
+            <div style={{textAlign:'center',color:'#9CA3AF',fontSize:13,
+              fontFamily:'Inter',paddingTop:40}}>
+              Seja o primeiro a enviar uma mensagem!
+            </div>
+          )}
+          {msgs.map((msg,idx)=>{
+            const isMe=msg.player_id===player.id
+            const msgDate=new Date(msg.created_at).toLocaleDateString('pt-BR')
+            const showDate=msgDate!==lastDate
+            lastDate=msgDate
+            return(
+              <div key={msg.id}>
+                {showDate&&(
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,marginTop:4}}>
+                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.08)'}}/>
+                    <span style={{fontFamily:'Sora',fontWeight:600,fontSize:10,
+                      color:'#9CA3AF',letterSpacing:'.1em',textTransform:'uppercase'}}>
+                      {msgDate===new Date().toLocaleDateString('pt-BR')?'TODAY':msgDate}
+                    </span>
+                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.08)'}}/>
+                  </div>
+                )}
+                <div style={{display:'flex',flexDirection:isMe?'row-reverse':'row',
+                  gap:10,alignItems:'flex-end'}}>
+                  {/* Avatar */}
+                  {!isMe&&(
+                    <div style={{width:36,height:36,borderRadius:'50%',overflow:'hidden',
+                      border:'1.5px solid rgba(0,0,0,.08)',background:'#F3F0EA',
+                      display:'flex',alignItems:'center',justifyContent:'center',
+                      flexShrink:0,fontSize:18}}>
+                      {msg.player_avatar||'⚽'}
+                    </div>
+                  )}
+                  <div style={{maxWidth:'72%'}}>
+                    {!isMe&&(
+                      <div style={{fontFamily:'Sora',fontWeight:700,fontSize:11,
+                        color:'#1A1A1A',marginBottom:4,marginLeft:2}}>
+                        {msg.player_name}
+                      </div>
+                    )}
+                    <div style={{
+                      padding:'12px 14px',
+                      borderRadius:isMe?'18px 18px 4px 18px':'18px 18px 18px 4px',
+                      background:isMe?'#1A3D28':'#fff',
+                      color:isMe?'#fff':'#1A1A1A',
+                      fontSize:14,lineHeight:1.45,fontFamily:'Inter',
+                      boxShadow:isMe?'0 2px 8px rgba(26,61,40,.2)':'0 2px 8px rgba(0,0,0,.06)',
+                      border:isMe?'none':'1px solid rgba(0,0,0,.06)',
+                    }}>
+                      {msg.content}
+                    </div>
+                    <div style={{fontSize:10,color:'#9CA3AF',marginTop:4,fontFamily:'Inter',
+                      textAlign:isMe?'right':'left',paddingLeft:2,paddingRight:2,
+                      display:'flex',alignItems:'center',justifyContent:isMe?'flex-end':'flex-start',gap:3}}>
+                      {fmtTime(msg.created_at)}
+                      {isMe&&<span style={{fontSize:10,color:'#9CA3AF'}}>✓✓</span>}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )
-        })}
-        <div ref={bottomRef}/>
-      </div>
+            )
+          })}
+          <div ref={bottomRef}/>
+        </div>
+      )}
 
-      {/* Input */}
-      <div style={{padding:'12px 16px',background:'var(--bg-card)',
-        borderTop:'1px solid var(--n200)',display:'flex',gap:8,alignItems:'center'}}>
-        <span style={{fontSize:24}}>{player.avatar||'⚽'}</span>
-        <input
-          className="input"
-          style={{flex:1,padding:'10px 14px',borderRadius:24,fontSize:14}}
-          placeholder="Mensagem..."
-          value={text}
-          onChange={e=>setText(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&handleSend()}
-          maxLength={500}
-        />
+      {/* Input bar */}
+      <div style={{background:'#fff',padding:'10px 12px',
+        borderTop:'1px solid rgba(0,0,0,.07)',
+        display:'flex',alignItems:'center',gap:10,
+        boxShadow:'0 -2px 12px rgba(0,0,0,.04)'}}>
+        <button style={{width:36,height:36,borderRadius:'50%',display:'flex',
+          alignItems:'center',justifyContent:'center',flexShrink:0,
+          color:'#9CA3AF',background:'none',border:'none',cursor:'pointer'}}>
+          <Paperclip size={18}/>
+        </button>
+        <div style={{flex:1,background:'#F8F4EE',borderRadius:24,
+          border:'1px solid rgba(0,0,0,.07)',padding:'10px 16px',
+          display:'flex',alignItems:'center'}}>
+          <input
+            style={{flex:1,border:'none',background:'transparent',outline:'none',
+              fontSize:14,fontFamily:'Inter',color:'#1A1A1A'}}
+            placeholder="Type a message..."
+            value={text}
+            onChange={e=>setText(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&handleSend()}
+            maxLength={500}
+          />
+        </div>
         <button onClick={handleSend} disabled={!text.trim()||sending}
-          style={{width:40,height:40,borderRadius:'50%',display:'flex',alignItems:'center',
-            justifyContent:'center',fontSize:16,background:text.trim()?'var(--g800)':'var(--n200)',
-            color:'white',flexShrink:0,transition:'background .15s'}}>
-          {sending ? '⏳' : '➤'}
+          style={{width:42,height:42,borderRadius:'50%',flexShrink:0,
+            background:text.trim()?'linear-gradient(135deg,#1A3D28,#1E5235)':'#E8E3DB',
+            display:'flex',alignItems:'center',justifyContent:'center',
+            transition:'all .15s',cursor:text.trim()?'pointer':'not-allowed',
+            boxShadow:text.trim()?'0 2px 8px rgba(26,61,40,.3)':'none'}}>
+          <Send size={16} color={text.trim()?'#fff':'#B0A898'}/>
         </button>
       </div>
     </div>
