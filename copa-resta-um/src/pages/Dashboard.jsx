@@ -194,7 +194,7 @@ export default function Dashboard({ player }) {
             const isMe = l.id === player.id
             return (
               <div key={l.id} style={{
-                display:'flex',alignItems:'center',gap:10,padding:'8px 0',
+                display:'flex',alignItems:'center',gap:10,
                 borderBottom: i < leaders.length-1 ? '1px solid var(--n200)' : 'none',
                 opacity: l.eliminated ? .45 : 1,
                 background: isMe ? 'var(--gold-light)' : 'transparent',
