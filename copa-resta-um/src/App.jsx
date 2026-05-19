@@ -12,30 +12,28 @@ import './index.css'
 
 function ProfileById({ player }) {
   const { id } = useParams()
-  return <Profile player={player} viewPlayerId={id} />
+  return <Profile player={player} viewPlayerId={id}/>
 }
 
 export default function App() {
   const [player, setPlayer] = useState(() => {
     try { return JSON.parse(localStorage.getItem('copa_player')) } catch { return null }
   })
-
-  if (!player) return <Login onLogin={setPlayer} />
-
+  if (!player) return <Login onLogin={setPlayer}/>
   return (
     <BrowserRouter>
-      <Navbar player={player} onLogout={() => setPlayer(null)} />
+      <Navbar player={player} onLogout={() => setPlayer(null)}/>
       <main>
         <Routes>
-          <Route path="/"            element={<Navigate to="/pick" replace />} />
-          <Route path="/pick"        element={<Pick player={player} />} />
-          <Route path="/calendar"    element={<Calendar />} />
-          <Route path="/rankings"    element={<Rankings player={player} />} />
-          <Route path="/profile"     element={<Profile player={player} />} />
-          <Route path="/profile/:id" element={<ProfileById player={player} />} />
-          <Route path="/chat"        element={<Chat player={player} />} />
-          <Route path="/dashboard"   element={<Navigate to="/pick" replace />} />
-          <Route path="*"            element={<Navigate to="/pick" replace />} />
+          <Route path="/"            element={<Navigate to="/dashboard" replace/>}/>
+          <Route path="/dashboard"   element={<Dashboard player={player}/>}/>
+          <Route path="/pick"        element={<Pick player={player}/>}/>
+          <Route path="/calendar"    element={<Calendar/>}/>
+          <Route path="/rankings"    element={<Rankings player={player}/>}/>
+          <Route path="/profile"     element={<Profile player={player}/>}/>
+          <Route path="/profile/:id" element={<ProfileById player={player}/>}/>
+          <Route path="/chat"        element={<Chat player={player}/>}/>
+          <Route path="*"            element={<Navigate to="/dashboard" replace/>}/>
         </Routes>
       </main>
     </BrowserRouter>
