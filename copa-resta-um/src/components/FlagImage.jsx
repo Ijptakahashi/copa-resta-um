@@ -1,5 +1,4 @@
 const CODE = {
-  // English (canonical)
   'Algeria':'dz','Argentina':'ar','Australia':'au','Austria':'at','Belgium':'be',
   'Bosnia and Herzegovina':'ba','Bosnia & Herzegovina':'ba','Bosnia-Herzegovina':'ba','Bosnia':'ba',
   'Brazil':'br','Canada':'ca','Cape Verde':'cv','Colombia':'co',
@@ -19,7 +18,7 @@ const CODE = {
   'Mali':'ml','Cameroon':'cm','Serbia':'rs','Poland':'pl','Denmark':'dk',
   'Wales':'gb-wls','Albania':'al','Slovenia':'si','Slovakia':'sk',
   'Romania':'ro','Hungary':'hu','Greece':'gr','Ukraine':'ua',
-  // Portuguese-only names (not duplicating English above)
+  // Português
   'Brasil':'br','México':'mx','África do Sul':'za','Coreia do Sul':'kr',
   'República Tcheca':'cz','Tchéquia':'cz','Canadá':'ca',
   'Bósnia-Herzegovina':'ba','Catar':'qa','Suíça':'ch',
@@ -41,26 +40,50 @@ export function countryCode(name) {
   return CODE[(name||'').trim()] || null
 }
 
-const DIMS = { xs:[24,17], sm:[36,25], md:[56,38], lg:[80,55], xl:[110,76] }
+// flagcdn.com suporta apenas: 20, 40, 80, 160, 320, 640
+function cdnW(px) {
+  if (px <= 20) return 20
+  if (px <= 40) return 40
+  if (px <= 80) return 80
+  return 160
+}
+
+// [display_w, display_h, cdn_w]
+const DIMS = {
+  xs: [24, 17, 40],
+  sm: [36, 25, 40],
+  md: [56, 38, 80],
+  lg: [80, 55, 80],
+  xl: [110, 76, 160],
+}
 
 export default function FlagImage({ team, size='md', grayscale=false, style:extraStyle={}, className='' }) {
   const code = countryCode(team)
-  const [w, h] = DIMS[size] || DIMS.md
+  const [w, h, cdn] = DIMS[size] || DIMS.md
+
   if (!code) return (
-    <div style={{width:w,height:h,background:'#F3F0EA',borderRadius:4,display:'flex',
-      alignItems:'center',justifyContent:'center',border:'1px solid #E5E7EB',...extraStyle}}
-      className={className}>
-      <span style={{fontSize:9,color:'#9CA3AF',fontFamily:'Sora',fontWeight:700}}>
+    <div style={{
+      width:w, height:h, background:'#F3F0EA', borderRadius:4,
+      display:'flex', alignItems:'center', justifyContent:'center',
+      border:'1px solid #E5E7EB', flexShrink:0, ...extraStyle,
+    }} className={className}>
+      <span style={{fontSize:9, color:'#9CA3AF', fontFamily:'Sora', fontWeight:700}}>
         {(team||'?').slice(0,3).toUpperCase()}
       </span>
     </div>
   )
+
   return (
-    <img src={`https://flagcdn.com/w${w*2}/${code}.png`}
+    <img
+      src={`https://flagcdn.com/w${cdn}/${code}.png`}
       width={w} height={h} alt={team} loading="lazy"
-      style={{borderRadius:4,objectFit:'cover',display:'block',flexShrink:0,
+      style={{
+        borderRadius:4, objectFit:'cover', display:'block', flexShrink:0,
         border:'1px solid rgba(0,0,0,.08)',
-        filter:grayscale?'grayscale(100%) opacity(.4)':'none',...extraStyle}}
-      className={className}/>
+        filter: grayscale ? 'grayscale(100%) opacity(.4)' : 'none',
+        ...extraStyle,
+      }}
+      className={className}
+    />
   )
 }
