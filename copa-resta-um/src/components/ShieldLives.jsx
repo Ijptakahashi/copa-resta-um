@@ -1,28 +1,26 @@
-// Ícone de escudo igual ao mockup
-export function ShieldIcon({ active, size = 26 }) {
+export function ShieldIcon({ active, size=22 }) {
   return (
-    <span className={`shield-icon ${active ? 'active' : 'empty'}`}>
-      <svg viewBox="0 0 24 28" style={{width:size,height:size*28/24}} fill="none">
-        <path d="M12 1L2 5.5v8c0 6.8 4.3 13.2 10 14.5C17.7 26.7 22 20.3 22 13.5v-8L12 1z"
-          fill={active ? '#D6B36A' : 'none'}
-          stroke={active ? '#D6B36A' : '#D1D5DB'}
-          strokeWidth="1.5" strokeLinejoin="round"/>
-      </svg>
-    </span>
+    <svg width={size} height={Math.round(size*1.18)} viewBox="0 0 22 26" fill="none">
+      <path d="M11 1.5L2.5 5.5v7.8c0 6.8 4.2 12.6 8.5 13.9C15.3 25.9 19.5 20.1 19.5 13.3V5.5L11 1.5z"
+        fill={active?'#C9A44A':'none'}
+        stroke={active?'#C9A44A':'#D4CABC'}
+        strokeWidth="1.4" strokeLinejoin="round"/>
+    </svg>
   )
 }
 
-export default function ShieldLives({ lives, max, showCount = true }) {
+export default function ShieldLives({ lives, max, size=22, showCount=true, showLabel=false }) {
   return (
-    <div className="shields">
-      {Array.from({ length: max }).map((_, i) => (
-        <ShieldIcon key={i} active={i < lives} />
+    <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'wrap'}}>
+      {Array.from({length:max}).map((_,i)=>(
+        <ShieldIcon key={i} active={i<lives} size={size}/>
       ))}
       {showCount && (
-        <div style={{marginLeft:6}}>
-          <span className="shields-count">{lives}</span>
-          <span className="shields-label"> / {max}</span>
-        </div>
+        <span style={{fontFamily:'Sora',fontWeight:700,fontSize:13,
+          color:'#C9A44A',marginLeft:4}}>
+          {lives} / {max}
+          {showLabel && <span style={{fontSize:11,fontWeight:600,marginLeft:4,color:'rgba(201,164,74,.7)'}}>LIVES REMAINING</span>}
+        </span>
       )}
     </div>
   )
