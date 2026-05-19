@@ -53,9 +53,11 @@ export default function Profile({ player, viewPlayerId }) {
       const {error:upErr}=await supabase.storage.from('avatars')
         .upload(path,file,{upsert:true,contentType:file.type})
       if(upErr){
-        setPhErr(upErr.message.includes('ucket')
-          ?'Crie o bucket: Supabase → Storage → New Bucket → "avatars" → Public → Create'
-          :upErr.message)
+        if (upErr.message.includes('ucket') || upErr.message.includes('not found')) {
+          setPhErr('Para fotos: Supabase → Storage → New bucket → nome: avatars → ative "Public bucket" → Save')
+        } else {
+          setPhErr(upErr.message)
+        }
         return
       }
       const {data}=supabase.storage.from('avatars').getPublicUrl(path)
