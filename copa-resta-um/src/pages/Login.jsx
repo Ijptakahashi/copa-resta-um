@@ -209,7 +209,7 @@ export default function Login({ onLogin }) {
             <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:4,marginBottom:16}}>
               {AVATARS.map(a=>(
                 <button key={a} onClick={()=>setAvatar(a)}
-                  style={{fontSize:20,padding:'6px 2px',borderRadius:8,background:'none',
+                  style={{fontSize:20,padding:'6px 2px',borderRadius:8,
                     border:`2px solid ${avatar===a?'#D6B36A':'transparent'}`,
                     background:avatar===a?'#FBF5E6':'transparent',cursor:'pointer'}}>
                   {a}
