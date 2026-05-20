@@ -316,3 +316,126 @@ export default function Dashboard({ player }) {
                   <span style={{fontFamily:'Sora',fontWeight:700,fontSize:11,textTransform:'uppercase'}}>
                     {m.away_team}
                   </span>
+                </div>
+              </div>
+            ))}
+            <button onClick={()=>navigate('/pick')}
+              style={{width:'100%',padding:'13px',borderRadius:12,border:'none',
+                background:'linear-gradient(135deg,#1A3D28,#1E5235)',
+                color:'#fff',fontFamily:'Sora',fontSize:13,fontWeight:700,
+                letterSpacing:'.06em',textTransform:'uppercase',cursor:'pointer'}}>
+              MAKE YOUR PICK
+            </button>
+          </>
+        ) : (
+          <div style={{textAlign:'center',padding:'12px 0',color:'#9CA3AF',fontSize:13,fontFamily:'Inter'}}>
+            Prazo encerrado para hoje
+          </div>
+        )}
+      </div>
+
+      {/* Today's picks reveal */}
+      <TodayPicksReveal
+        todayMs={todayMs}
+        allPlayers={allPlayers}
+        allPicks={allPicks}
+        today={today}
+      />
+
+      {/* Next match countdown — CENTERED */}
+      {nextMatch && (
+        <div style={{background:'#fff',borderRadius:16,padding:'20px 16px',marginBottom:12,
+          border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)',
+          textAlign:'center'}}>
+          <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+            textTransform:'uppercase',color:'#6B6B6B',marginBottom:14}}>NEXT MATCH STARTS IN</div>
+          <Countdown target={nextMatch.utc_date}/>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',
+            gap:8,marginTop:14}}>
+            {getFlagImg(nextMatch.home_team, 24)}
+            <span style={{fontFamily:'Sora',fontWeight:600,fontSize:12}}>{nextMatch.home_team}</span>
+            <span style={{fontSize:11,color:'#9CA3AF',fontFamily:'Sora',fontWeight:600}}>vs</span>
+            <span style={{fontFamily:'Sora',fontWeight:600,fontSize:12}}>{nextMatch.away_team}</span>
+            {getFlagImg(nextMatch.away_team, 24)}
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard preview */}
+      {leaders.length>0&&(
+        <div style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
+          border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+              textTransform:'uppercase',color:'#6B6B6B'}}>LEADERBOARD</div>
+            <button onClick={()=>navigate('/rankings')}
+              style={{display:'flex',alignItems:'center',gap:2,fontFamily:'Sora',
+                fontWeight:700,fontSize:10,color:'#C9A44A',letterSpacing:'.06em',
+                background:'none',border:'none',cursor:'pointer'}}>
+              VIEW ALL <ChevronRight size={12}/>
+            </button>
+          </div>
+          {leaders.map((l,i)=>{
+            const isMe = l.id===player.id
+            const maxLl = l.inKnockout?3:6
+            return(
+              <div key={l.id} style={{display:'flex',alignItems:'center',gap:10,
+                padding:'9px 0',
+                borderBottom:i<leaders.length-1?'1px solid rgba(0,0,0,.05)':'none',
+                background:isMe?'rgba(201,164,74,.06)':'transparent',
+                borderRadius:isMe?8:0,paddingLeft:isMe?8:0,paddingRight:isMe?8:0,
+                opacity:l.eliminated?.5:1}}>
+                <div style={{fontFamily:'Sora',fontWeight:800,fontSize:14,
+                  width:18,textAlign:'center',color:i<3?'#C9A44A':'#9CA3AF',flexShrink:0}}>
+                  {i+1}
+                </div>
+                <div style={{width:32,height:32,borderRadius:'50%',overflow:'hidden',
+                  border:`1.5px solid ${isMe?'rgba(201,164,74,.5)':'rgba(0,0,0,.08)'}`,
+                  background:'#F3F0EA',display:'flex',alignItems:'center',
+                  justifyContent:'center',flexShrink:0}}>
+                  {l.avatar_url
+                    ? <img src={l.avatar_url} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                    : <span style={{fontSize:16,lineHeight:1}}>{l.avatar||'⚽'}</span>
+                  }
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A'}}>
+                    {l.name}{isMe?' (você)':''}
+                  </div>
+                </div>
+                {l.eliminated ? (
+                  <span style={{fontFamily:'Sora',fontSize:10,fontWeight:700,color:'#C4302B'}}>💀</span>
+                ) : (
+                  <div style={{display:'flex',alignItems:'center',gap:3}}>
+                    {Array.from({length:maxLl}).map((_,j)=>(
+                      <svg key={j} width={13} height={16} viewBox="0 0 22 26" fill="none">
+                        <path d="M11 1.5L2.5 5.5v7.8c0 6.8 4.2 12.6 8.5 13.9C15.3 25.9 19.5 20.1 19.5 13.3V5.5L11 1.5z"
+                          fill={j<l.lives?'#C9A44A':'none'}
+                          stroke={j<l.lives?'#C9A44A':'#D4CABC'}
+                          strokeWidth="1.4" strokeLinejoin="round"/>
+                      </svg>
+                    ))}
+                    <span style={{fontFamily:'Sora',fontWeight:700,fontSize:13,
+                      color:'#1A1A1A',marginLeft:4}}>{l.lives}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Sync */}
+      <button onClick={handleSync} disabled={syncing}
+        style={{width:'100%',padding:'12px',borderRadius:12,
+          border:'1px solid rgba(0,0,0,.07)',background:'#fff',
+          color:'#6B6B6B',fontFamily:'Sora',fontSize:12,fontWeight:700,
+          letterSpacing:'.06em',cursor:'pointer',display:'flex',
+          alignItems:'center',justifyContent:'center',gap:6,
+          boxShadow:'0 1px 4px rgba(0,0,0,.04)'}}>
+        <RefreshCw size={13} style={syncing?{animation:'spin 1s linear infinite'}:{}}/>
+        {syncing ? 'ATUALIZANDO...' : 'ATUALIZAR RESULTADOS'}
+      </button>
+    </div>
+  )
+}
