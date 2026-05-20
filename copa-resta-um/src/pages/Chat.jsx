@@ -1,114 +1,126 @@
 import { useState, useEffect, useRef } from 'react'
-import { ArrowLeft, Send, Paperclip } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { Send, Paperclip } from 'lucide-react'
 import { getMessages, sendMessage, subscribeToMessages, getPlayers } from '../lib/supabase'
+import { countryCode } from '../components/FlagImage'
 
 export default function Chat({ player }) {
-  const navigate   = useNavigate()
-  const [msgs,setMsgs]   = useState([])
-  const [text,setText]   = useState('')
-  const [loading,setLoad]= useState(true)
-  const [sending,setSend]= useState(false)
-  const [online,setOnline]= useState(0)
-  const bottomRef         = useRef(null)
+  const [msgs, setMsgs]       = useState([])
+  const [text, setText]       = useState('')
+  const [loading, setLoad]    = useState(true)
+  const [sending, setSend]    = useState(false)
+  const [online, setOnline]   = useState(0)
+  const [playerMap, setMap]   = useState({})
+  const bottomRef             = useRef(null)
 
-  useEffect(()=>{
-    getMessages().then(m=>{setMsgs(m);setLoad(false)})
-    getPlayers().then(p=>setOnline(p.length))
-    const ch=subscribeToMessages(p=>setMsgs(prev=>[...prev,p.new]))
-    return()=>ch.unsubscribe()
-  },[])
+  useEffect(() => {
+    Promise.all([getMessages(), getPlayers()]).then(([msgs, players]) => {
+      setMsgs(msgs)
+      const map = {}
+      players.forEach(p => map[p.id] = p)
+      setMap(map)
+      setOnline(players.length)
+      setLoad(false)
+    })
+    const ch = subscribeToMessages(p => setMsgs(prev => [...prev, p.new]))
+    return () => ch.unsubscribe()
+  }, [])
 
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}) },[msgs])
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior:'smooth' }) }, [msgs])
 
-  async function handleSend(){
-    const content=text.trim()
-    if(!content||sending) return
+  async function handleSend() {
+    const content = text.trim()
+    if (!content || sending) return
     setSend(true); setText('')
-    try{ await sendMessage(player.id,player.name,player.avatar||'⚽',content) }
-    catch{ setText(content) } finally{ setSend(false) }
+    try { await sendMessage(player.id, player.name, player.avatar||'⚽', content) }
+    catch { setText(content) } finally { setSend(false) }
   }
 
-  function fmtTime(ts){
-    return new Date(ts).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
   }
 
-  // Group by date
-  let lastDate=''
+  function Avatar({ msg, size=36 }) {
+    const p = playerMap[msg.player_id]
+    const photoUrl = p?.avatar_url
+    return (
+      <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden',
+        border:'1.5px solid rgba(0,0,0,.08)', background:'#F3F0EA', flexShrink:0,
+        display:'flex', alignItems:'center', justifyContent:'center' }}>
+        {photoUrl
+          ? <img src={photoUrl} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+          : <span style={{fontSize:size*.5,lineHeight:1}}>{msg.player_avatar||'⚽'}</span>
+        }
+      </div>
+    )
+  }
+
+  let lastDate = ''
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100svh - 54px - 56px)',
-      maxWidth:430,margin:'0 auto',background:'#F8F4EE'}}>
+    <div style={{display:'flex',flexDirection:'column',
+      height:'calc(100svh - 54px - 56px)',maxWidth:430,margin:'0 auto',background:'#F8F4EE'}}>
 
-      {/* Chat header */}
+      {/* Header */}
       <div style={{background:'#fff',padding:'12px 16px',
-        borderBottom:'1px solid rgba(0,0,0,.07)',
-        display:'flex',flexDirection:'column',alignItems:'center',gap:2}}>
-        <div style={{fontFamily:'Sora',fontWeight:800,fontSize:18,color:'#1A3D28',
-          letterSpacing:'-.3px'}}>GROUP CHAT</div>
-        <div style={{display:'flex',alignItems:'center',gap:5,fontSize:12,
-          color:'#1A3D28',fontFamily:'Inter',fontWeight:500}}>
+        borderBottom:'1px solid rgba(0,0,0,.07)',textAlign:'center',
+        boxShadow:'0 1px 6px rgba(0,0,0,.04)'}}>
+        <div style={{fontFamily:'Sora',fontWeight:800,fontSize:18,color:'#1A3D28',letterSpacing:'-.3px'}}>
+          GROUP CHAT
+        </div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,
+          fontSize:12,color:'#1A3D28',fontFamily:'Inter',fontWeight:500,marginTop:2}}>
           <div style={{width:8,height:8,borderRadius:'50%',background:'#22C55E'}}/>
           {online} online
         </div>
       </div>
 
-      {/* Date separator line */}
-      {loading&&(
+      {/* Messages */}
+      {loading ? (
         <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid #E8E3DB',
+          <div style={{width:28,height:28,borderRadius:'50%',border:'3px solid #E8E3DB',
             borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
           <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
         </div>
-      )}
-
-      {/* Messages */}
-      {!loading&&(
+      ) : (
         <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',
-          flexDirection:'column',gap:16}}>
-          {msgs.length===0&&(
+          flexDirection:'column',gap:14}}>
+          {msgs.length === 0 && (
             <div style={{textAlign:'center',color:'#9CA3AF',fontSize:13,
               fontFamily:'Inter',paddingTop:40}}>
               Seja o primeiro a enviar uma mensagem!
             </div>
           )}
-          {msgs.map((msg,idx)=>{
-            const isMe=msg.player_id===player.id
-            const msgDate=new Date(msg.created_at).toLocaleDateString('pt-BR')
-            const showDate=msgDate!==lastDate
-            lastDate=msgDate
-            return(
+          {msgs.map((msg, idx) => {
+            const isMe = msg.player_id === player.id
+            const msgDate = new Date(msg.created_at).toLocaleDateString('pt-BR')
+            const showDate = msgDate !== lastDate
+            lastDate = msgDate
+            const todayStr = new Date().toLocaleDateString('pt-BR')
+            return (
               <div key={msg.id}>
-                {showDate&&(
-                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:12,marginTop:4}}>
-                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.08)'}}/>
+                {showDate && (
+                  <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:10,marginTop:4}}>
+                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.07)'}}/>
                     <span style={{fontFamily:'Sora',fontWeight:600,fontSize:10,
                       color:'#9CA3AF',letterSpacing:'.1em',textTransform:'uppercase'}}>
-                      {msgDate===new Date().toLocaleDateString('pt-BR')?'TODAY':msgDate}
+                      {msgDate === todayStr ? 'TODAY' : msgDate}
                     </span>
-                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.08)'}}/>
+                    <div style={{flex:1,height:1,background:'rgba(0,0,0,.07)'}}/>
                   </div>
                 )}
-                <div style={{display:'flex',flexDirection:isMe?'row-reverse':'row',
+                <div style={{display:'flex',
+                  flexDirection:isMe?'row-reverse':'row',
                   gap:10,alignItems:'flex-end'}}>
-                  {/* Avatar */}
-                  {!isMe&&(
-                    <div style={{width:36,height:36,borderRadius:'50%',overflow:'hidden',
-                      border:'1.5px solid rgba(0,0,0,.08)',background:'#F3F0EA',
-                      display:'flex',alignItems:'center',justifyContent:'center',
-                      flexShrink:0,fontSize:18}}>
-                      {msg.player_avatar||'⚽'}
-                    </div>
-                  )}
+                  {!isMe && <Avatar msg={msg} size={36}/>}
                   <div style={{maxWidth:'72%'}}>
-                    {!isMe&&(
+                    {!isMe && (
                       <div style={{fontFamily:'Sora',fontWeight:700,fontSize:11,
                         color:'#1A1A1A',marginBottom:4,marginLeft:2}}>
                         {msg.player_name}
                       </div>
                     )}
                     <div style={{
-                      padding:'12px 14px',
+                      padding:'11px 14px',
                       borderRadius:isMe?'18px 18px 4px 18px':'18px 18px 18px 4px',
                       background:isMe?'#1A3D28':'#fff',
                       color:isMe?'#fff':'#1A1A1A',
@@ -118,11 +130,12 @@ export default function Chat({ player }) {
                     }}>
                       {msg.content}
                     </div>
-                    <div style={{fontSize:10,color:'#9CA3AF',marginTop:4,fontFamily:'Inter',
+                    <div style={{fontSize:10,color:'#9CA3AF',marginTop:3,fontFamily:'Inter',
                       textAlign:isMe?'right':'left',paddingLeft:2,paddingRight:2,
-                      display:'flex',alignItems:'center',justifyContent:isMe?'flex-end':'flex-start',gap:3}}>
+                      display:'flex',alignItems:'center',
+                      justifyContent:isMe?'flex-end':'flex-start',gap:3}}>
                       {fmtTime(msg.created_at)}
-                      {isMe&&<span style={{fontSize:10,color:'#9CA3AF'}}>✓✓</span>}
+                      {isMe && <span style={{fontSize:10,color:'#9CA3AF'}}>✓✓</span>}
                     </div>
                   </div>
                 </div>
@@ -133,21 +146,19 @@ export default function Chat({ player }) {
         </div>
       )}
 
-      {/* Input bar */}
+      {/* Input */}
       <div style={{background:'#fff',padding:'10px 12px',
         borderTop:'1px solid rgba(0,0,0,.07)',
         display:'flex',alignItems:'center',gap:10,
         boxShadow:'0 -2px 12px rgba(0,0,0,.04)'}}>
         <button style={{width:36,height:36,borderRadius:'50%',display:'flex',
-          alignItems:'center',justifyContent:'center',flexShrink:0,
-          color:'#9CA3AF',background:'none',border:'none',cursor:'pointer'}}>
+          alignItems:'center',justifyContent:'center',flexShrink:0,color:'#9CA3AF'}}>
           <Paperclip size={18}/>
         </button>
         <div style={{flex:1,background:'#F8F4EE',borderRadius:24,
-          border:'1px solid rgba(0,0,0,.07)',padding:'10px 16px',
-          display:'flex',alignItems:'center'}}>
+          border:'1px solid rgba(0,0,0,.07)',padding:'10px 16px'}}>
           <input
-            style={{flex:1,border:'none',background:'transparent',outline:'none',
+            style={{width:'100%',border:'none',background:'transparent',outline:'none',
               fontSize:14,fontFamily:'Inter',color:'#1A1A1A'}}
             placeholder="Type a message..."
             value={text}
@@ -161,7 +172,7 @@ export default function Chat({ player }) {
             background:text.trim()?'linear-gradient(135deg,#1A3D28,#1E5235)':'#E8E3DB',
             display:'flex',alignItems:'center',justifyContent:'center',
             transition:'all .15s',cursor:text.trim()?'pointer':'not-allowed',
-            boxShadow:text.trim()?'0 2px 8px rgba(26,61,40,.3)':'none'}}>
+            boxShadow:text.trim()?'0 2px 8px rgba(26,61,40,.3)':'none',border:'none'}}>
           <Send size={16} color={text.trim()?'#fff':'#B0A898'}/>
         </button>
       </div>
