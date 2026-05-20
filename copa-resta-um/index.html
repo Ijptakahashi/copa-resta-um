@@ -1,16 +1,19 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Survivor Pool 2026</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+:root {
+  --bg:#F8F4EE; --card:#fff; --green:#1A3D28; --green2:#1E5235;
+  --gold:#C9A44A; --gold-lt:#FBF5E6; --gold-dk:#A07830;
+  --red:#C4302B; --red-lt:#FEF0EF;
+  --text:#1A1A1A; --t2:#6B6B6B; --t3:#9CA3AF;
+  --border:rgba(0,0,0,.07); --r:16px; --r-sm:10px;
+  --sh:0 2px 12px rgba(0,0,0,.07);
+  --sh2:0 4px 24px rgba(0,0,0,.10);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-tap-highlight-color:transparent}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
+  min-height:100svh;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+#root{min-height:100svh;display:flex;flex-direction:column}
+button{font-family:inherit;cursor:pointer;border:none;background:none}
+img{display:block}
+.page{padding:16px 16px 96px;max-width:430px;margin:0 auto;width:100%}
+.sora{font-family:'Sora',sans-serif}
