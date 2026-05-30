@@ -86,12 +86,21 @@ export async function getAllPicks(date) {
 }
 
 export async function submitPick({ playerId, matchId, teamName, teamId, phase, pickDate, isRepeat }) {
-  const { data, error } = await supabase.from('picks')
-    .insert({ player_id: playerId, match_id: matchId, team_name: teamName,
-              team_id: teamId, phase, pick_date: pickDate, is_repeat: isRepeat })
-    .select().single()
+  // Check if pick already exists for this day (allow modification until deadline)
+  const { data: existing } = await supabase
+    .from('picks').select('id').eq('player_id', playerId).eq('pick_date', pickDate).maybeSingle()
+  if (existing) {
+    const { error } = await supabase.from('picks')
+      .update({ team_name: teamName, team_id: teamId, is_repeat: isRepeat, result: null, lives_lost: 0 })
+      .eq('id', existing.id)
+    if (error) throw error
+    return
+  }
+  const { error } = await supabase.from('picks').insert({
+    player_id: playerId, match_id: matchId, team_name: teamName,
+    team_id: teamId, phase, pick_date: pickDate, is_repeat: isRepeat,
+  })
   if (error) throw error
-  return data
 }
 
 export async function updatePickResult(pickId, result, livesLost) {

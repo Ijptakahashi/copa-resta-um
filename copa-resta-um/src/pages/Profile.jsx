@@ -53,11 +53,9 @@ export default function Profile({ player, viewPlayerId }) {
       const {error:upErr}=await supabase.storage.from('avatars')
         .upload(path,file,{upsert:true,contentType:file.type})
       if(upErr){
-        if (upErr.message.includes('ucket') || upErr.message.includes('not found')) {
-          setPhErr('Para fotos: Supabase → Storage → New bucket → nome: avatars → ative "Public bucket" → Save')
-        } else {
-          setPhErr(upErr.message)
-        }
+        setPhErr(upErr.message.includes('ucket')
+          ?'Crie o bucket: Supabase → Storage → New Bucket → "avatars" → Public → Create'
+          :upErr.message)
         return
       }
       const {data}=supabase.storage.from('avatars').getPublicUrl(path)
@@ -267,15 +265,15 @@ export default function Profile({ player, viewPlayerId }) {
                 <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,
                   padding:'12px 16px',
                   borderBottom:i<picks.length-1?'1px solid rgba(0,0,0,.05)':'none'}}>
-                  <div style={{width:40,height:40,borderRadius:'50%',overflow:'hidden',
-                    border:`2px solid ${p.result==='win'?'#1A3D28':p.result==='loss'?'#C4302B':p.result==='draw'?'#2563EB':'rgba(0,0,0,.1)'}`,
-                    background:'#F3F0EA',flexShrink:0,
-                    display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    {code
-                      ? <img src={`https://flagcdn.com/w80/${code}.png`} style={{width:'100%',height:'100%',objectFit:'cover'}} alt={p.team_name}/>
-                      : <span style={{fontSize:10,color:'#9CA3AF',fontFamily:'Sora',fontWeight:700}}>–</span>
-                    }
-                  </div>
+                  {code?(
+                    <img src={`https://flagcdn.com/w40/${code}.png`} alt={p.team_name}
+                      width={36} height={25} style={{borderRadius:3,border:'1px solid rgba(0,0,0,.08)',flexShrink:0}}/>
+                  ):(
+                    <div style={{width:36,height:25,background:'#F3F0EA',borderRadius:3,
+                      display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <span style={{fontSize:9,color:'#9CA3AF',fontFamily:'Sora',fontWeight:700}}>–</span>
+                    </div>
+                  )}
                   <div style={{flex:1}}>
                     <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A'}}>
                       {p.team_name==='no_pick'?'No pick submitted':p.team_name}

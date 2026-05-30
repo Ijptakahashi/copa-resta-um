@@ -106,7 +106,7 @@ export function computeLives(picks) {
   const inKnockout = settled.some(p => KNOCKOUT_PHASES.includes(p.phase))
 
   return {
-    lives: Math.max(0, inKnockout ? 3 - knockoutLosses : 6 - groupLosses),
+    lives: Math.max(0, 6 - groupLosses - knockoutLosses),
     groupLosses,
     knockoutLosses,
     inKnockout,
@@ -123,7 +123,12 @@ export function isEliminated(picks) {
 export function getTeamStatus(picks, teamId) {
   const used = picks.filter(p => p.team_id === teamId && p.result !== null && p.result !== 'no_pick')
   if (used.length === 0) return 'available'
+  // Perdeu quando escolhida = queimada pra sempre
   if (used.some(p => p.result === 'loss')) return 'burned'
+  // Já usada no mata-mata (venceu/empatou) = não pode mais reutilizar
+  const usedInKnockout = used.some(p => p.phase !== 'groups')
+  if (usedInKnockout) return 'burned'
+  // Venceu/empatou nos grupos = liberada para UMA reutilização no mata-mata
   return 'unlocked'
 }
 
@@ -148,17 +153,27 @@ export function buildInventory(picks) {
 export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch) {
   if (!todayMatch) return { valid: false, reason: 'Sem jogo hoje.' }
 
-  const status = getTeamStatus(playerPicks, teamId)
-  if (status === 'burned') return { valid: false, reason: `${teamName} está QUEIMADA. Ela perdeu quando você a escolheu antes.` }
+  const used = playerPicks.filter(p =>
+    p.team_id === teamId && p.result !== null && p.result !== 'no_pick')
 
-  if (currentPhase === 'groups') {
-    const usedInGroups = playerPicks.filter(p => p.team_id === teamId && p.phase === 'groups')
-    if (usedInGroups.length > 0) {
-      if (status === 'burned') return { valid: false, reason: `${teamName} está queimada.` }
-      return { valid: true, warning: `⚠️ Repetição! Usar ${teamName} novamente custa +1 vida extra (independente do resultado).` }
-    }
+  // Perdeu quando escolhida = queimada pra sempre, em qualquer fase
+  if (used.some(p => p.result === 'loss')) {
+    return { valid: false, reason: `${teamName} está QUEIMADA — perdeu quando você a escolheu.` }
   }
 
+  if (currentPhase === 'groups') {
+    // Não pode repetir nos grupos
+    if (used.some(p => p.phase === 'groups')) {
+      return { valid: false, reason: `${teamName} já foi usada na fase de grupos. Não é permitido repetir.` }
+    }
+  } else {
+    // Mata-mata: não pode repetir time já usado no mata-mata (qualquer fase do MM)
+    if (used.some(p => p.phase !== 'groups')) {
+      return { valid: false, reason: `${teamName} já foi usada no mata-mata. Não pode escolher de novo.` }
+    }
+    // Pode usar: time liberado dos grupos (venceu/empatou) OU nunca usado.
+    // Esta é a única reutilização permitida — uma vez no MM.
+  }
   return { valid: true }
 }
 
@@ -179,10 +194,8 @@ export function resolveResult(match, teamId) {
 // Compute lives_lost for a pick result
 export function computeLivesLost(result, isRepeat, phase) {
   let lost = 0
+  // Derrota ou sem pick = -1 vida. Empate = pick desperdiçada, sem perda.
   if (result === 'loss' || result === 'no_pick') lost += 1
-  // empate in groups = no life lost, but pick wasted
-  // repeat in groups always costs 1 extra
-  if (isRepeat && phase === 'groups') lost += 1
   return lost
 }
 
@@ -221,9 +234,34 @@ export function isPickOpen(dayMatches) {
 // ─── Sorting/ranking ─────────────────────────────────────────
 
 export function rankPlayers(playersWithPicks) {
+  // Desempate oficial:
+  // 1. Mais vidas  2. Mais picks certas  3. Menos repetições
+  // 4. Saldo de gols dos picks  5. Sorteio (nome)
   return [...playersWithPicks].sort((a, b) => {
-    if (b.lives !== a.lives) return b.lives - a.lives
-    if (b.correct !== a.correct) return b.correct - a.correct
-    return a.name.localeCompare(b.name)
+    if (b.lives !== a.lives)       return b.lives - a.lives
+    if (b.correct !== a.correct)   return b.correct - a.correct
+    const aRep = a.repeats || 0, bRep = b.repeats || 0
+    if (aRep !== bRep)             return aRep - bRep          // menos repetições primeiro
+    const aGd = a.goalDiff || 0, bGd = b.goalDiff || 0
+    if (bGd !== aGd)               return bGd - aGd            // maior saldo primeiro
+    return a.name.localeCompare(b.name)                        // sorteio determinístico
   })
+}
+
+// Calcula métricas de desempate para um jogador
+export function tiebreakStats(picks, matches) {
+  const settled = picks.filter(p => p.result !== null && p.result !== 'no_pick')
+  // Repetições: time usado mais de uma vez (reutilização no mata-mata)
+  const teamCounts = {}
+  settled.forEach(p => { teamCounts[p.team_id] = (teamCounts[p.team_id]||0) + 1 })
+  const repeats = Object.values(teamCounts).reduce((s,c) => s + Math.max(0, c-1), 0)
+  // Saldo de gols dos picks (gols do time escolhido - gols do adversário)
+  let goalDiff = 0
+  settled.forEach(p => {
+    const m = matches.find(mm => mm.id === p.match_id)
+    if (!m || m.home_score == null || m.away_score == null) return
+    const pickedHome = m.home_team_id === p.team_id
+    goalDiff += pickedHome ? (m.home_score - m.away_score) : (m.away_score - m.home_score)
+  })
+  return { repeats, goalDiff }
 }
