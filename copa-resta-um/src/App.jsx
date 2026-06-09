@@ -8,6 +8,7 @@ import Rankings from './pages/Rankings'
 import Profile from './pages/Profile'
 import Chat from './pages/Chat'
 import Navbar from './components/Navbar'
+import InstallButton from './components/InstallButton'
 import './index.css'
 
 function ProfileById({ player }) {
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Navbar player={player} onLogout={() => setPlayer(null)}/>
+      <InstallButton/>
       <main>
         <Routes>
           <Route path="/"            element={<Navigate to="/dashboard" replace/>}/>

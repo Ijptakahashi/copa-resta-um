@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Settings, Camera } from 'lucide-react'
-import { getPlayerPicks, getPlayers } from '../lib/supabase'
-import { computeLives } from '../lib/gameLogic'
+import { getPlayerPicks, getPlayers, getMatches } from '../lib/supabase'
+import { computeLives, pickDeadline, toLocalDateISO } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 
@@ -25,6 +25,7 @@ export default function Profile({ player, viewPlayerId }) {
   const isMe     = targetId === player.id
   const [tp,setTP]         = useState(null)
   const [picks,setPicks]   = useState([])
+  const [matches,setMatches] = useState([])
   const [loading,setLoad]  = useState(true)
   const [tab,setTab]       = useState('inventory')
   const [uploading,setUpl] = useState(false)
@@ -36,7 +37,8 @@ export default function Profile({ player, viewPlayerId }) {
 
   async function load(){
     setLoad(true)
-    const [pp,players]=await Promise.all([getPlayerPicks(targetId),getPlayers()])
+    const [pp,players,ms]=await Promise.all([getPlayerPicks(targetId),getPlayers(),getMatches()])
+    setMatches(ms)
     setPicks(pp)
     const t=players.find(p=>p.id===targetId)||player
     setTP(t); setPhoto(t.avatar_url||null); setLoad(false)
@@ -84,6 +86,14 @@ export default function Profile({ player, viewPlayerId }) {
     if(!usedMap[p.team_name]) usedMap[p.team_name]=[]
     if(p.result) usedMap[p.team_name].push(p.result)
   })
+  // Pick de outro jogador só é visível depois de travar (deadline do dia passou)
+  function isPickLocked(pickDate) {
+    const dayMatches = matches.filter(m => toLocalDateISO(m.utc_date) === pickDate)
+    const dl = pickDeadline(dayMatches)
+    if (!dl) return true            // sem jogos cadastrados nesse dia = trata como travado
+    return new Date() >= dl
+  }
+
   function getStatus(name){
     const r=usedMap[name]
     if(!r||!r.length) return 'available'
@@ -260,7 +270,9 @@ export default function Profile({ player, viewPlayerId }) {
               fontFamily:'Sora',fontSize:13}}>Nenhuma pick ainda.</div>
           ):(
             [...picks].reverse().map((p,i)=>{
-              const code=countryCode(p.team_name)
+              const locked = isPickLocked(p.pick_date)
+              const hidden = !isMe && !locked   // perfil de outro + pick não travada = ocultar
+              const code = hidden ? null : countryCode(p.team_name)
               return(
                 <div key={p.id} style={{display:'flex',alignItems:'center',gap:12,
                   padding:'12px 16px',
@@ -275,9 +287,11 @@ export default function Profile({ player, viewPlayerId }) {
                     </div>
                   )}
                   <div style={{flex:1}}>
-                    <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A'}}>
-                      {p.team_name==='no_pick'?'No pick submitted':p.team_name}
-                      {p.is_repeat&&<span style={{fontSize:10,color:'#A07830',marginLeft:5,
+                    <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,
+                      color:hidden?'#9CA3AF':'#1A1A1A'}}>
+                      {hidden?'🔒 Oculto até travar'
+                        :p.team_name==='no_pick'?'Sem pick':p.team_name}
+                      {!hidden&&p.is_repeat&&<span style={{fontSize:10,color:'#A07830',marginLeft:5,
                         fontWeight:600}}>↻ repeat</span>}
                     </div>
                     <div style={{fontSize:11,color:'#9CA3AF',fontFamily:'Inter',marginTop:1}}>
@@ -285,15 +299,17 @@ export default function Profile({ player, viewPlayerId }) {
                     </div>
                   </div>
                   <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:3}}>
-                    {!p.result&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                    {hidden&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                      color:'#9CA3AF',background:'#F3F0EA',padding:'3px 8px',borderRadius:12}}>🔒 LOCKED</span>}
+                    {!hidden&&!p.result&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
                       color:'#C9A44A',background:'#FBF5E6',padding:'3px 8px',borderRadius:12}}>PENDING</span>}
-                    {p.result==='win'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                    {!hidden&&p.result==='win'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
                       color:'#1A3D28',background:'#EBF5EE',padding:'3px 8px',borderRadius:12}}>✓ CORRECT</span>}
-                    {p.result==='draw'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                    {!hidden&&p.result==='draw'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
                       color:'#2563EB',background:'#EFF6FF',padding:'3px 8px',borderRadius:12}}>=  DRAW</span>}
-                    {p.result==='loss'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                    {!hidden&&p.result==='loss'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
                       color:'#C4302B',background:'#FEF0EF',padding:'3px 8px',borderRadius:12}}>✗ WRONG</span>}
-                    {p.result==='no_pick'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
+                    {!hidden&&p.result==='no_pick'&&<span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,
                       color:'#9CA3AF',background:'#F3F0EA',padding:'3px 8px',borderRadius:12}}>MISSED</span>}
                     {p.lives_lost>0&&<span style={{fontSize:10,color:'#C4302B',fontFamily:'Inter'}}>
                       −{p.lives_lost} vida{p.lives_lost>1?'s':''}
