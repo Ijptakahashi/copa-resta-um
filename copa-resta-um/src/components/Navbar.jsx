@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { Home, Shield, Trophy, MessageCircle, User, LogOut } from 'lucide-react'
+import Avatar from './Avatar'
 
 const NAV = [
   {to:'/dashboard', Icon:Home,          label:'Dashboard'},
@@ -38,14 +39,7 @@ export default function Navbar({ player, onLogout }) {
         {/* Player */}
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:30,height:30,borderRadius:'50%',overflow:'hidden',
-              border:'2px solid #C9A44A',background:'#F3F0EA',
-              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-              {player?.avatar_url
-                ? <img src={player.avatar_url} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-                : <span style={{fontSize:16,lineHeight:1}}>{player?.avatar||'⚽'}</span>
-              }
-            </div>
+            <Avatar name={player?.name} photoUrl={player?.avatar_url} size={32}/>
             <span style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A',
               maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
               {player?.name}

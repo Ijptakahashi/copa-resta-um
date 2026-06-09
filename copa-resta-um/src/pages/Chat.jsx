@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Paperclip } from 'lucide-react'
 import { getMessages, sendMessage, subscribeToMessages, getPlayers } from '../lib/supabase'
 import { countryCode } from '../components/FlagImage'
+import Avatar from '../components/Avatar'
 
 export default function Chat({ player }) {
   const [msgs, setMsgs]       = useState([])
@@ -31,7 +32,7 @@ export default function Chat({ player }) {
     const content = text.trim()
     if (!content || sending) return
     setSend(true); setText('')
-    try { await sendMessage(player.id, player.name, player.avatar||'⚽', content) }
+    try { await sendMessage(player.id, player.name, player.avatar||'', content) }
     catch { setText(content) } finally { setSend(false) }
   }
 
@@ -39,19 +40,9 @@ export default function Chat({ player }) {
     return new Date(ts).toLocaleTimeString('pt-BR', { hour:'2-digit', minute:'2-digit' })
   }
 
-  function Avatar({ msg, size=36 }) {
+  function MsgAvatar({ msg, size=36 }) {
     const p = playerMap[msg.player_id]
-    const photoUrl = p?.avatar_url
-    return (
-      <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden',
-        border:'1.5px solid rgba(0,0,0,.08)', background:'#F3F0EA', flexShrink:0,
-        display:'flex', alignItems:'center', justifyContent:'center' }}>
-        {photoUrl
-          ? <img src={photoUrl} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-          : <span style={{fontSize:size*.5,lineHeight:1}}>{msg.player_avatar||'⚽'}</span>
-        }
-      </div>
-    )
+    return <Avatar name={msg.player_name} photoUrl={p?.avatar_url} size={size}/>
   }
 
   let lastDate = ''
@@ -111,7 +102,7 @@ export default function Chat({ player }) {
                 <div style={{display:'flex',
                   flexDirection:isMe?'row-reverse':'row',
                   gap:10,alignItems:'flex-end'}}>
-                  {!isMe && <Avatar msg={msg} size={36}/>}
+                  {!isMe && <MsgAvatar msg={msg} size={36}/>}
                   <div style={{maxWidth:'72%'}}>
                     {!isMe && (
                       <div style={{fontFamily:'Sora',fontWeight:700,fontSize:11,

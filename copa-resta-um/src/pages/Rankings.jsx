@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPlayers, getAllPicks } from '../lib/supabase'
 import { computeLives } from '../lib/gameLogic'
+import Avatar from '../components/Avatar'
 
 export default function Rankings({ player }) {
   const navigate = useNavigate()
@@ -47,19 +48,7 @@ export default function Rankings({ player }) {
     )
   }
 
-  // Avatar: foto de perfil se existir, senão emoji
-  function Avatar({ p, isMe, size=36 }) {
-    return (
-      <div style={{width:size,height:size,borderRadius:'50%',overflow:'hidden',flexShrink:0,
-        border:`1.5px solid ${isMe?'#C9A44A':'rgba(0,0,0,.08)'}`,
-        background:'#F3F0EA',display:'flex',alignItems:'center',justifyContent:'center'}}>
-        {p.avatar_url
-          ? <img src={p.avatar_url} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-          : <span style={{fontSize:size*0.5,lineHeight:1}}>{p.avatar||'⚽'}</span>
-        }
-      </div>
-    )
-  }
+
 
   return (
     <div className="page">
@@ -114,7 +103,7 @@ export default function Rankings({ player }) {
                 {medals[i] || i+1}
               </div>
               <div style={{flex:1,display:'flex',alignItems:'center',gap:10,minWidth:0}}>
-                <Avatar p={p} isMe={isMe}/>
+                <Avatar name={p.name} photoUrl={p.avatar_url} size={36} ring={isMe?'#C9A44A':null}/>
                 <div style={{minWidth:0}}>
                   <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A',
                     overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>

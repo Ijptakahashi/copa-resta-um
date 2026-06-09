@@ -4,6 +4,7 @@ import { getPlayerPicks, getPlayers, getMatches } from '../lib/supabase'
 import { computeLives, pickDeadline, toLocalDateISO } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
+import Avatar from '../components/Avatar'
 
 // Exactly 48 Copa 2026 teams (12 groups × 4)
 const ALL_TEAMS = [
@@ -117,14 +118,8 @@ export default function Profile({ player, viewPlayerId }) {
       {/* Avatar + name */}
       <div style={{display:'flex',flexDirection:'column',alignItems:'center',marginBottom:20}}>
         <div style={{position:'relative',marginBottom:12}}>
-          <div style={{width:88,height:88,borderRadius:'50%',overflow:'hidden',
-            border:'3px solid #C9A44A',background:'#F3F0EA',
-            display:'flex',alignItems:'center',justifyContent:'center',
-            boxShadow:'0 0 0 4px rgba(201,164,74,.15)'}}>
-            {photoUrl
-              ? <img src={photoUrl} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-              : <span style={{fontSize:44,lineHeight:1}}>{tp?.avatar||'⚽'}</span>
-            }
+          <div style={{boxShadow:'0 0 0 4px rgba(201,164,74,.15)',borderRadius:'50%'}}>
+            <Avatar name={tp?.name} photoUrl={photoUrl} size={88} ring="#C9A44A"/>
           </div>
           {isMe&&(
             <>

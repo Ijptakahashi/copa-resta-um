@@ -1,19 +1,85 @@
-@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
 :root {
-  --bg:#F8F4EE; --card:#fff; --green:#1A3D28; --green2:#1E5235;
-  --gold:#C9A44A; --gold-lt:#FBF5E6; --gold-dk:#A07830;
-  --red:#C4302B; --red-lt:#FEF0EF;
-  --text:#1A1A1A; --t2:#6B6B6B; --t3:#9CA3AF;
-  --border:rgba(0,0,0,.07); --r:16px; --r-sm:10px;
-  --sh:0 2px 12px rgba(0,0,0,.07);
-  --sh2:0 4px 24px rgba(0,0,0,.10);
+  --bg: #F8F4EE;
+  --green: #1A3D28;
+  --green-light: #2D6A4F;
+  --gold: #C9A44A;
+  --gold-dark: #A07830;
+  --red: #C4302B;
+  --ink: #1A1A1A;
+  --n400: #9CA3AF;
 }
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-tap-highlight-color:transparent}
-body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);
-  min-height:100svh;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
-#root{min-height:100svh;display:flex;flex-direction:column}
-button{font-family:inherit;cursor:pointer;border:none;background:none}
-img{display:block}
-.page{padding:16px 16px 96px;max-width:430px;margin:0 auto;width:100%}
-.sora{font-family:'Sora',sans-serif}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  background: var(--bg);
+  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Safe areas for PWA standalone (notch) */
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+main { min-height: 100svh; }
+
+.page {
+  max-width: 430px;
+  margin: 0 auto;
+  padding: 20px 16px 90px;
+  animation: pageIn .45s cubic-bezier(.22,.61,.36,1);
+}
+
+/* ─── Animations ─────────────────────────────────── */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%     { opacity: .5; }
+}
+
+/* Cards fade in with subtle stagger when they appear */
+.fade-up { animation: fadeUp .5s cubic-bezier(.22,.61,.36,1) both; }
+.fade-up-1 { animation-delay: .04s; }
+.fade-up-2 { animation-delay: .08s; }
+.fade-up-3 { animation-delay: .12s; }
+.fade-up-4 { animation-delay: .16s; }
+.fade-up-5 { animation-delay: .20s; }
+
+/* Skeleton loader shimmer */
+.skeleton {
+  background: linear-gradient(90deg, #ECE7DF 25%, #F3EFE8 50%, #ECE7DF 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: 12px;
+}
+
+/* ─── Button press feedback ──────────────────────── */
+button {
+  -webkit-tap-highlight-color: transparent;
+  transition: transform .08s ease, box-shadow .15s ease, opacity .15s ease;
+}
+button:active:not(:disabled) { transform: scale(.97); }
+
+/* Smooth scroll + hide scrollbars on mobile */
+* { scrollbar-width: thin; }
+::-webkit-scrollbar { width: 0; height: 0; }
+
+input, button { font-family: inherit; }
+a { color: inherit; text-decoration: none; }

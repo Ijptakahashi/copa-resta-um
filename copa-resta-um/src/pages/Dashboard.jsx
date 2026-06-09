@@ -7,6 +7,7 @@ import { computeLives, todayBrasilia, toLocalDateISO, isPickOpen,
 import { syncMatches, syncResults, processNoPicks } from '../lib/football'
 import { ShieldIcon } from '../components/ShieldLives'
 import { countryCode } from '../components/FlagImage'
+import Avatar from '../components/Avatar'
 
 function Countdown({ target, style: extraStyle={} }) {
   const [t, setT] = useState({ h:'--', m:'--', s:'--' })
@@ -73,15 +74,8 @@ function TodayPicksReveal({ todayMs, allPlayers, allPicks, today }) {
             <div key={p.id} style={{display:'flex',flexDirection:'column',
               alignItems:'center',gap:5,width:52}}>
               {/* Player avatar */}
-              <div style={{width:36,height:36,borderRadius:'50%',overflow:'hidden',
-                border:`1.5px solid ${eliminated?'#C4302B':'rgba(0,0,0,.1)'}`,
-                background:'#F3F0EA',flexShrink:0,
-                display:'flex',alignItems:'center',justifyContent:'center'}}>
-                {p.avatar_url
-                  ? <img src={p.avatar_url} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-                  : <span style={{fontSize:18,lineHeight:1}}>{p.avatar||'⚽'}</span>
-                }
-              </div>
+              <Avatar name={p.name} photoUrl={p.avatar_url} size={36}
+                ring={eliminated?'#C4302B':null} dim={eliminated}/>
               <div style={{fontFamily:'Sora',fontWeight:600,fontSize:8,textAlign:'center',
                 color:'#6B6B6B',lineHeight:1.2,maxWidth:52,overflow:'hidden',
                 textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
@@ -228,7 +222,7 @@ export default function Dashboard({ player }) {
       </div>
 
       {/* Lives */}
-      <div style={{background:'linear-gradient(135deg,#162E1E,#1A3D28)',borderRadius:16,
+      <div className="fade-up fade-up-1" style={{background:'linear-gradient(135deg,#162E1E,#1A3D28)',borderRadius:16,
         padding:'20px',marginBottom:12,boxShadow:'0 4px 24px rgba(22,46,30,.3)',
         position:'relative',overflow:'hidden'}}>
         <div style={{position:'absolute',top:-30,right:-30,width:130,height:130,
@@ -247,7 +241,7 @@ export default function Dashboard({ player }) {
       </div>
 
       {/* Today's Pick */}
-      <div style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
+      <div className="fade-up fade-up-2" style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
         border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
           <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
@@ -344,7 +338,7 @@ export default function Dashboard({ player }) {
 
       {/* Next match countdown — CENTERED */}
       {nextMatch && (
-        <div style={{background:'#fff',borderRadius:16,padding:'20px 16px',marginBottom:12,
+        <div className="fade-up fade-up-3" style={{background:'#fff',borderRadius:16,padding:'20px 16px',marginBottom:12,
           border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)',
           textAlign:'center'}}>
           <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
@@ -363,7 +357,7 @@ export default function Dashboard({ player }) {
 
       {/* Leaderboard preview */}
       {leaders.length>0&&(
-        <div style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
+        <div className="fade-up fade-up-4" style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
           border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
             <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
@@ -389,15 +383,8 @@ export default function Dashboard({ player }) {
                   width:18,textAlign:'center',color:i<3?'#C9A44A':'#9CA3AF',flexShrink:0}}>
                   {i+1}
                 </div>
-                <div style={{width:32,height:32,borderRadius:'50%',overflow:'hidden',
-                  border:`1.5px solid ${isMe?'rgba(201,164,74,.5)':'rgba(0,0,0,.08)'}`,
-                  background:'#F3F0EA',display:'flex',alignItems:'center',
-                  justifyContent:'center',flexShrink:0}}>
-                  {l.avatar_url
-                    ? <img src={l.avatar_url} style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
-                    : <span style={{fontSize:16,lineHeight:1}}>{l.avatar||'⚽'}</span>
-                  }
-                </div>
+                <Avatar name={l.name} photoUrl={l.avatar_url} size={32}
+                  ring={isMe?'rgba(201,164,74,.5)':null}/>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:'Sora',fontWeight:600,fontSize:13,color:'#1A1A1A'}}>
                     {l.name}{isMe?' (você)':''}

@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { Shield, ChevronRight, User, Lock, Plus, ArrowLeft } from 'lucide-react'
 import { getPlayers, loginPlayer, registerPlayer } from '../lib/supabase'
+import Avatar from '../components/Avatar'
 
-const AVATARS = ['⚽','🏆','🦁','🔥','⚡','🎯','👑','🚀','🐺','🦅','🦊','💪','🌟','🧠','🐲','🤙','🦈','💀','🎭','🎪','🥊','🏴','⚔️','🛡️']
 
 export default function Login({ onLogin }) {
   const [step, setStep]         = useState('name')
   const [name, setName]         = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm]   = useState('')
-  const [avatar, setAvatar]     = useState('⚽')
   const [existing, setExisting] = useState(null)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
@@ -49,8 +48,8 @@ export default function Login({ onLogin }) {
       const buf  = await crypto.subtle.digest('SHA-256', data)
       const hash = Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('')
       const { supabase } = await import('../lib/supabase')
-      await supabase.from('players').update({ password_hash: hash, avatar }).eq('id', existing.id)
-      const updated = { ...existing, avatar }
+      await supabase.from('players').update({ password_hash: hash }).eq('id', existing.id)
+      const updated = { ...existing }
       localStorage.setItem('copa_player', JSON.stringify(updated))
       onLogin(updated)
     } catch { setError('Erro ao salvar. Tente novamente.') }
@@ -62,7 +61,7 @@ export default function Login({ onLogin }) {
     if (password !== confirm) { setError('Senhas não conferem.'); return }
     setLoading(true); setError('')
     try {
-      const p = await registerPlayer(name.trim(), password, avatar)
+      const p = await registerPlayer(name.trim(), password, '')
       localStorage.setItem('copa_player', JSON.stringify(p))
       onLogin(p)
     } catch(e) { setError(e.message.includes('unique') ? 'Nome já existe.' : 'Erro ao criar conta.') }
@@ -77,6 +76,17 @@ export default function Login({ onLogin }) {
       background:'linear-gradient(165deg, #071A0E 0%, #0D2B17 40%, #0A2010 100%)',
       position:'relative', overflow:'hidden',
     }}>
+      {/* Animations */}
+      <style>{`
+        @keyframes floatBadge { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+        @keyframes glowPulse  { 0%,100%{opacity:.04} 50%{opacity:.10} }
+        @keyframes riseCard   { from{opacity:0;transform:translateY(40px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeDown   { from{opacity:0;transform:translateY(-12px)} to{opacity:1;transform:translateY(0)} }
+        .login-badge { animation: floatBadge 3.5s ease-in-out infinite; }
+        .login-header { animation: fadeDown .7s cubic-bezier(.22,.61,.36,1) both; }
+        .login-card { animation: riseCard .6s cubic-bezier(.22,.61,.36,1) both; }
+        .login-glow { animation: glowPulse 4s ease-in-out infinite; }
+      `}</style>
       {/* Field lines background */}
       <div style={{
         position:'absolute', inset:0, opacity:.07,
@@ -86,15 +96,15 @@ export default function Login({ onLogin }) {
         `,
       }}/>
       {/* Spotlight glow */}
-      <div style={{
+      <div className="login-glow" style={{
         position:'absolute', top:'-20%', left:'50%', transform:'translateX(-50%)',
         width:'120%', height:'70%', borderRadius:'50%',
         background:'radial-gradient(ellipse, rgba(255,255,255,.04) 0%, transparent 70%)',
       }}/>
 
       {/* Header */}
-      <div style={{position:'relative', textAlign:'center', paddingTop:60, paddingBottom:20}}>
-        <div style={{
+      <div className="login-header" style={{position:'relative', textAlign:'center', paddingTop:60, paddingBottom:20}}>
+        <div className="login-badge" style={{
           width:64, height:64, borderRadius:'50%',
           background:'linear-gradient(135deg, #D6B36A, #A07C3A)',
           display:'flex', alignItems:'center', justifyContent:'center',
@@ -117,7 +127,7 @@ export default function Login({ onLogin }) {
         flex:1, display:'flex', alignItems:'flex-end', justifyContent:'center',
         padding:'0 20px 32px', position:'relative',
       }}>
-        <div style={{
+        <div className="login-card" style={{
           width:'100%', maxWidth:400,
           background:'rgba(255,255,255,.97)',
           borderRadius:24, padding:28,
@@ -174,7 +184,7 @@ export default function Login({ onLogin }) {
               <ArrowLeft size={14}/> Voltar
             </button>
             <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
-              <div style={{fontSize:40}}>{existing?.avatar||'⚽'}</div>
+              <Avatar name={existing?.name} photoUrl={existing?.avatar_url} size={48}/>
               <div>
                 <div style={{fontFamily:'Sora',fontSize:18,fontWeight:800,color:'#0D2B17'}}>{existing?.name}</div>
                 <div style={{fontSize:12,color:'#6B7280'}}>Bem-vindo de volta!</div>
@@ -204,17 +214,10 @@ export default function Login({ onLogin }) {
             <div style={{fontFamily:'Sora',fontSize:18,fontWeight:800,color:'#0D2B17',marginBottom:4}}>
               {step==='register' ? `Criar conta — ${name}` : `Olá, ${existing?.name}!`}
             </div>
-            <div style={{fontSize:13,color:'#6B7280',marginBottom:16}}>Escolha seu avatar e crie uma senha.</div>
-            {/* Avatar grid */}
-            <div style={{display:'grid',gridTemplateColumns:'repeat(8,1fr)',gap:4,marginBottom:16}}>
-              {AVATARS.map(a=>(
-                <button key={a} onClick={()=>setAvatar(a)}
-                  style={{fontSize:20,padding:'6px 2px',borderRadius:8,
-                    border:`2px solid ${avatar===a?'#D6B36A':'transparent'}`,
-                    background:avatar===a?'#FBF5E6':'transparent',cursor:'pointer'}}>
-                  {a}
-                </button>
-              ))}
+            <div style={{fontSize:13,color:'#6B7280',marginBottom:16}}>Crie uma senha. Você pode adicionar uma foto depois no seu perfil.</div>
+            {/* Avatar preview com iniciais do nome */}
+            <div style={{display:'flex',justifyContent:'center',marginBottom:18}}>
+              <Avatar name={step==='register'?name:existing?.name} size={72} ring="#C9A44A"/>
             </div>
             <div style={{position:'relative',marginBottom:8}}>
               <Lock size={16} color="#9CA3AF" style={{position:'absolute',left:14,top:'50%',transform:'translateY(-50%)'}}/>

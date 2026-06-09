@@ -153,6 +153,11 @@ export function buildInventory(picks) {
 export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch) {
   if (!todayMatch) return { valid: false, reason: 'Sem jogo hoje.' }
 
+  // Mata-mata ainda não liberado — picks só na fase de grupos por enquanto.
+  if (currentPhase && currentPhase !== 'groups') {
+    return { valid: false, reason: 'As picks do mata-mata serão liberadas quando a fase começar.' }
+  }
+
   const used = playerPicks.filter(p =>
     p.team_id === teamId && p.result !== null && p.result !== 'no_pick')
 
