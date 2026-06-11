@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Settings, Camera } from 'lucide-react'
-import { getPlayerPicks, getPlayers, getMatches } from '../lib/supabase'
+import { Settings, Camera, Lock, X } from 'lucide-react'
+import { getPlayerPicks, getPlayers, getMatches, changePassword } from '../lib/supabase'
 import { computeLives, pickDeadline, toLocalDateISO } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 import Avatar from '../components/Avatar'
+import { ProfileSkeleton } from '../components/Skeletons'
 
 // Exactly 48 Copa 2026 teams (12 groups × 4)
 const ALL_TEAMS = [
@@ -33,6 +34,12 @@ export default function Profile({ player, viewPlayerId }) {
   const [photoUrl,setPhoto]= useState(null)
   const [photoErr,setPhErr]= useState('')
   const fileRef            = useRef()
+  const [showPwModal,setShowPw] = useState(false)
+  const [curPw,setCurPw]   = useState('')
+  const [newPw,setNewPw]   = useState('')
+  const [newPw2,setNewPw2] = useState('')
+  const [pwMsg,setPwMsg]   = useState('')
+  const [pwSaving,setPwSaving] = useState(false)
 
   useEffect(()=>{ load() },[targetId])
 
@@ -68,13 +75,7 @@ export default function Profile({ player, viewPlayerId }) {
     } catch(e){setPhErr(e.message)} finally{setUpl(false)}
   }
 
-  if(loading) return(
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}>
-      <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid #E8E3DB',
-        borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if(loading) return <ProfileSkeleton/>
 
   const {lives,inKnockout}=computeLives(picks)
   const maxL=inKnockout?3:6
@@ -102,12 +103,28 @@ export default function Profile({ player, viewPlayerId }) {
     return 'unlocked'
   }
 
+  async function handleChangePw() {
+    setPwMsg('')
+    if (newPw.length < 4) { setPwMsg('A nova senha precisa de ao menos 4 caracteres.'); return }
+    if (newPw !== newPw2) { setPwMsg('As senhas novas não coincidem.'); return }
+    setPwSaving(true)
+    try {
+      await changePassword(player.id, curPw, newPw)
+      setPwMsg('ok')
+      setCurPw(''); setNewPw(''); setNewPw2('')
+      setTimeout(() => { setShowPw(false); setPwMsg('') }, 1200)
+    } catch(e) {
+      setPwMsg(e.message || 'Erro ao trocar senha.')
+    } finally { setPwSaving(false) }
+  }
+
   return(
     <div className="page">
       {/* Header */}
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
         {isMe&&(
-          <button style={{width:36,height:36,borderRadius:'50%',background:'#fff',
+          <button onClick={()=>setShowPw(true)}
+            style={{width:36,height:36,borderRadius:'50%',background:'#fff',
             border:'1px solid rgba(0,0,0,.07)',display:'flex',alignItems:'center',
             justifyContent:'center',boxShadow:'0 1px 4px rgba(0,0,0,.06)',cursor:'pointer'}}>
             <Settings size={16} color="#6B6B6B"/>
@@ -314,6 +331,54 @@ export default function Profile({ player, viewPlayerId }) {
               )
             })
           )}
+        </div>
+      )}
+      {/* Modal trocar senha */}
+      {showPwModal && (
+        <div onClick={()=>!pwSaving&&setShowPw(false)}
+          style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.5)',
+            display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:'#fff',borderRadius:20,padding:'24px 20px',maxWidth:380,width:'100%',
+              boxShadow:'0 8px 40px rgba(0,0,0,.25)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <Lock size={18} color="#1A3D28"/>
+                <span style={{fontFamily:'Sora',fontWeight:800,fontSize:17,color:'#1A3D28'}}>Trocar senha</span>
+              </div>
+              <button onClick={()=>!pwSaving&&setShowPw(false)}
+                style={{background:'none',border:'none',cursor:'pointer',color:'#9CA3AF'}}>
+                <X size={20}/>
+              </button>
+            </div>
+
+            {[['Senha atual',curPw,setCurPw],['Nova senha',newPw,setNewPw],['Confirmar nova senha',newPw2,setNewPw2]].map(([ph,val,setter],i)=>(
+              <input key={i} type="password" placeholder={ph} value={val}
+                onChange={e=>setter(e.target.value)}
+                style={{width:'100%',padding:'13px 16px',borderRadius:12,marginBottom:10,
+                  border:'1.5px solid rgba(0,0,0,.1)',fontSize:16,fontFamily:'Inter',
+                  outline:'none',background:'#F8F4EE'}}/>
+            ))}
+
+            {pwMsg && pwMsg!=='ok' && (
+              <div style={{background:'#FEF0EF',borderRadius:10,padding:'10px 14px',fontSize:12,
+                color:'#C4302B',fontFamily:'Inter',marginBottom:10,
+                border:'1px solid rgba(196,48,43,.2)'}}>{pwMsg}</div>
+            )}
+            {pwMsg==='ok' && (
+              <div style={{background:'#EBF5EE',borderRadius:10,padding:'10px 14px',fontSize:12,
+                color:'#1A3D28',fontFamily:'Inter',marginBottom:10,fontWeight:600,
+                border:'1px solid rgba(26,61,40,.2)'}}>✓ Senha alterada com sucesso!</div>
+            )}
+
+            <button onClick={handleChangePw} disabled={pwSaving}
+              style={{width:'100%',padding:'15px',borderRadius:12,border:'none',
+                background:pwSaving?'#E8E3DB':'linear-gradient(135deg,#1A3D28,#1E5235)',
+                color:pwSaving?'#B0A898':'#fff',fontFamily:'Sora',fontWeight:700,fontSize:14,
+                letterSpacing:'.04em',cursor:pwSaving?'default':'pointer',marginTop:4}}>
+              {pwSaving?'SALVANDO...':'SALVAR NOVA SENHA'}
+            </button>
+          </div>
         </div>
       )}
     </div>

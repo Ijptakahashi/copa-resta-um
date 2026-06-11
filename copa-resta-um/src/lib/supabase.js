@@ -35,6 +35,24 @@ export async function loginPlayer(name, password) {
   return data
 }
 
+export async function changePassword(playerId, currentPassword, newPassword) {
+  // Busca o hash atual
+  const { data, error } = await supabase
+    .from('players').select('password_hash').eq('id', playerId).single()
+  if (error) throw error
+  // Se já tem senha, valida a atual
+  if (data.password_hash) {
+    const curHash = await hashPassword(currentPassword)
+    if (data.password_hash !== curHash) {
+      throw new Error('Senha atual incorreta')
+    }
+  }
+  const newHash = await hashPassword(newPassword)
+  const { error: upErr } = await supabase
+    .from('players').update({ password_hash: newHash }).eq('id', playerId)
+  if (upErr) throw upErr
+}
+
 export async function updatePlayerAvatar(playerId, avatar) {
   const { error } = await supabase.from('players').update({ avatar }).eq('id', playerId)
   if (error) throw error

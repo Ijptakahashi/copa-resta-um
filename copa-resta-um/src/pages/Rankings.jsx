@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { getPlayers, getAllPicks } from '../lib/supabase'
 import { computeLives } from '../lib/gameLogic'
 import Avatar from '../components/Avatar'
+import { RankingsSkeleton } from '../components/Skeletons'
 
 export default function Rankings({ player }) {
   const navigate = useNavigate()
@@ -23,13 +24,7 @@ export default function Rankings({ player }) {
     load()
   }, [])
 
-  if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}>
-      <div style={{width:32,height:32,borderRadius:'50%',border:'3px solid #E8E3DB',
-        borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if (loading) return <RankingsSkeleton/>
 
   const pot = data.length * 50
 

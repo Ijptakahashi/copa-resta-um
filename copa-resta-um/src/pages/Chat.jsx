@@ -3,6 +3,7 @@ import { Send, Paperclip } from 'lucide-react'
 import { getMessages, sendMessage, subscribeToMessages, getPlayers } from '../lib/supabase'
 import { countryCode } from '../components/FlagImage'
 import Avatar from '../components/Avatar'
+import { ChatSkeleton } from '../components/Skeletons'
 
 export default function Chat({ player }) {
   const [msgs, setMsgs]       = useState([])
@@ -67,11 +68,7 @@ export default function Chat({ player }) {
 
       {/* Messages */}
       {loading ? (
-        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{width:28,height:28,borderRadius:'50%',border:'3px solid #E8E3DB',
-            borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
-          <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-        </div>
+        <ChatSkeleton/>
       ) : (
         <div style={{flex:1,overflowY:'auto',padding:'16px',display:'flex',
           flexDirection:'column',gap:14}}>
@@ -150,8 +147,8 @@ export default function Chat({ player }) {
           border:'1px solid rgba(0,0,0,.07)',padding:'10px 16px'}}>
           <input
             style={{width:'100%',border:'none',background:'transparent',outline:'none',
-              fontSize:14,fontFamily:'Inter',color:'#1A1A1A'}}
-            placeholder="Type a message..."
+              fontSize:16,fontFamily:'Inter',color:'#1A1A1A'}}
+            placeholder="Mensagem..."
             value={text}
             onChange={e=>setText(e.target.value)}
             onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&handleSend()}

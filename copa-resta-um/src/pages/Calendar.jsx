@@ -4,6 +4,7 @@ import { getMatches } from '../lib/supabase'
 import { syncMatches } from '../lib/football'
 import { STAGE_TO_PHASE, PHASE_LABEL, toLocalDateISO } from '../lib/gameLogic'
 import FlagImage from '../components/FlagImage'
+import { RankingsSkeleton } from '../components/Skeletons'
 
 function normName(n='') {
   return n.toLowerCase()
@@ -76,14 +77,7 @@ export default function Calendar() {
     }, 50)
   }
 
-  if (loading) return (
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
-      height:'50vh',gap:12,color:'#9CA3AF'}}>
-      <RefreshCw size={32} style={{animation:'spin 1s linear infinite'}}/>
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
-      <span style={{fontFamily:'Sora',fontSize:13}}>Carregando fixtures...</span>
-    </div>
-  )
+  if (loading) return <RankingsSkeleton/>
 
   return (
     <div style={{padding:'20px 16px 100px',maxWidth:480,margin:'0 auto'}}>

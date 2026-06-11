@@ -8,6 +8,7 @@ import { syncMatches, syncResults, processNoPicks } from '../lib/football'
 import { ShieldIcon } from '../components/ShieldLives'
 import { countryCode } from '../components/FlagImage'
 import Avatar from '../components/Avatar'
+import { DashboardSkeleton } from '../components/Skeletons'
 
 function Countdown({ target, style: extraStyle={} }) {
   const [t, setT] = useState({ h:'--', m:'--', s:'--' })
@@ -184,14 +185,7 @@ export default function Dashboard({ player }) {
     } catch(e) { console.error(e) } finally { setSyncing(false) }
   }
 
-  if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',
-      height:'60vh',flexDirection:'column',gap:12}}>
-      <div style={{width:36,height:36,borderRadius:'50%',border:'3px solid #E8E3DB',
-        borderTopColor:'#1A3D28',animation:'spin 1s linear infinite'}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if (loading) return <DashboardSkeleton/>
 
   const {lives, inKnockout} = computeLives(picks)
   const maxL = inKnockout ? 3 : 6

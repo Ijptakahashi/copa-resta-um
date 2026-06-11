@@ -6,6 +6,7 @@ import { computeLives, getTeamStatus, validatePick, todayBrasilia,
          toLocalDateISO, isPickOpen, pickDeadline, STAGE_TO_PHASE } from '../lib/gameLogic'
 import FlagImage from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
+import { PickSkeleton } from '../components/Skeletons'
 
 // Canonical name for robust deduplication
 function canon(n='') {
@@ -117,12 +118,7 @@ export default function Pick({ player }) {
     finally { setSub(false) }
   }
 
-  if (loading) return (
-    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}>
-      <RefreshCw size={28} color="#9CA3AF" style={{animation:'spin 1s linear infinite'}}/>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </div>
-  )
+  if (loading) return <PickSkeleton/>
 
   const { lives, inKnockout } = computeLives(picks)
   const maxL = inKnockout ? 3 : 6
