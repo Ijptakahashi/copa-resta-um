@@ -8,6 +8,23 @@ const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.
 const FD_BASE      = 'https://api.football-data.org/v4'
 const FD_KEY       = import.meta.env.VITE_FOOTBALL_API_KEY
 
+
+// Normaliza nomes para casar entre fontes diferentes (ESPN, openfootball, picks)
+function canonName(n='') {
+  const map = {
+    'korea republic':'south korea','korea rep.':'south korea','south korea':'south korea',
+    'czechia':'czech republic','czech republic':'czech republic',
+    'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
+    'usa':'united states','united states':'united states','united states of america':'united states',
+    'türkiye':'turkey','turkiye':'turkey','turkey':'turkey',
+    "côte d'ivoire":'ivory coast',"cote d'ivoire":'ivory coast','ivory coast':'ivory coast',
+    'curaçao':'curacao','curacao':'curacao','congo dr':'dr congo','dr congo':'dr congo',
+    'ir iran':'iran','iran':'iran',
+  }
+  const s = String(n).toLowerCase().trim()
+  return map[s] || s
+}
+
 function teamId(name) {
   let h = 5381
   for (let i = 0; i < name.length; i++) h = ((h << 5) + h) + name.charCodeAt(i)
@@ -63,6 +80,48 @@ function parseOpenfootball(json) {
   return rows
 }
 
+// ─── TheSportsDB: fonte gratuita SEM chave (fallback adicional) ───
+// https://www.thesportsdb.com — endpoint público com key de teste "3"
+async function updateScoresFromSportsDB(existingMatches) {
+  let count = 0
+  try {
+    // Liga FIFA World Cup = 4429 no TheSportsDB
+    const today = new Date()
+    const dates = []
+    for (let i = -2; i <= 0; i++) {
+      const d = new Date(today); d.setDate(d.getDate() + i)
+      dates.push(d.toISOString().slice(0,10))
+    }
+    for (const date of dates) {
+      const url = `https://www.thesportsdb.com/api/v1/json/3/eventsday.php?d=${date}&l=FIFA_World_Cup`
+      const json = await fetch(url, { cache:'no-store' }).then(r => r.json()).catch(()=>null)
+      if (!json || !json.events) continue
+      for (const ev of json.events) {
+        if (ev.intHomeScore == null || ev.intAwayScore == null) continue
+        const hScore = parseInt(ev.intHomeScore), aScore = parseInt(ev.intAwayScore)
+        if (isNaN(hScore) || isNaN(aScore)) continue
+        const cH = canonName(ev.strHomeTeam || ''), cA = canonName(ev.strAwayTeam || '')
+        const existing = existingMatches.find(m => {
+          const mH = canonName(m.home_team), mA = canonName(m.away_team)
+          return (mH === cH && mA === cA) || (mH === cA && mA === cH)
+        })
+        if (!existing) continue
+        // orienta placar conforme casa/fora do nosso registro
+        let hs = hScore, as = aScore
+        if (canonName(existing.home_team) === cA) { hs = aScore; as = hScore }
+        const finished = ev.strStatus === 'Match Finished' || ev.strStatus === 'FT'
+        const winner = hs > as ? 'HOME_TEAM' : as > hs ? 'AWAY_TEAM' : 'DRAW'
+        await supabase.from('matches')
+          .update({ home_score: hs, away_score: as, winner,
+                    status: finished ? 'FINISHED' : 'IN_PLAY' })
+          .eq('id', existing.id)
+        count++
+      }
+    }
+  } catch (e) { console.warn('TheSportsDB falhou:', e.message) }
+  return count
+}
+
 // Busca scores do ESPN e ATUALIZA registros existentes (sem criar duplicatas)
 async function updateScoresFromESPN(existingMatches) {
   try {
@@ -91,13 +150,12 @@ async function updateScoresFromESPN(existingMatches) {
         const awayName = away.team.displayName
         const eventDate = event.date?.slice(0, 10)
 
-        // Encontra o match correspondente pelo nome dos times
-        const existing = existingMatches.find(m =>
-          (m.home_team.toLowerCase().includes(homeName.toLowerCase().slice(0,4)) ||
-           homeName.toLowerCase().includes(m.home_team.toLowerCase().slice(0,4))) &&
-          (m.away_team.toLowerCase().includes(awayName.toLowerCase().slice(0,4)) ||
-           awayName.toLowerCase().includes(m.away_team.toLowerCase().slice(0,4)))
-        )
+        // Casa pelo nome canônico dos dois times (robusto, ignora ordem casa/fora)
+        const cH = canonName(homeName), cA = canonName(awayName)
+        const existing = existingMatches.find(m => {
+          const mH = canonName(m.home_team), mA = canonName(m.away_team)
+          return (mH === cH && mA === cA) || (mH === cA && mA === cH)
+        })
 
         if (existing) {
           await supabase.from('matches').update({ home_score: hScore, away_score: aScore, winner, status })
@@ -106,6 +164,16 @@ async function updateScoresFromESPN(existingMatches) {
       } catch { continue }
     }
   } catch (e) { console.warn('ESPN update falhou:', e.message) }
+}
+
+// ─── Atualiza scores tentando TODAS as fontes em cascata ───────
+async function updateAllScores(existingMatches) {
+  // 1. ESPN (tem dados ao vivo, mais rápido)
+  try { await updateScoresFromESPN(existingMatches) } catch (e) { console.warn('ESPN:', e.message) }
+  // 2. TheSportsDB (gratuito, sem chave) — pega o que a ESPN não pegou
+  try { await updateScoresFromSportsDB(existingMatches) } catch (e) { console.warn('SportsDB:', e.message) }
+  // 3. openfootball já traz scores no parse (atualizado ~1x/dia pelo mantenedor),
+  //    aplicado dentro de syncMatches via upsertMatches.
 }
 
 // ─── Sync principal ───────────────────────────────────────────
@@ -119,8 +187,8 @@ export async function syncMatches() {
     if (rows.length > 0) {
       await upsertMatches(rows)
       console.log(`✅ openfootball: ${rows.length} jogos`)
-      // Atualiza apenas scores (não insere novos registros)
-      await updateScoresFromESPN(rows)
+      // Atualiza scores de TODAS as fontes (ESPN + TheSportsDB)
+      await updateAllScores(rows)
       return rows
     }
   } catch (e) { console.warn('openfootball falhou:', e.message) }
@@ -149,23 +217,68 @@ export async function syncMatches() {
 // ─── Atualiza resultados das picks ───────────────────────────
 export async function syncResults(players) {
   const allMatches = await getMatches()
-  // Atualiza scores via ESPN primeiro
-  await updateScoresFromESPN(allMatches)
-  // Depois processa picks
+  // 1. Atualiza scores de todas as fontes
+  await updateAllScores(allMatches)
+  // 2. Recarrega com scores atualizados
   const updated = await getMatches()
   const finished = updated.filter(m => m.status === 'FINISHED' && m.winner)
-  for (const match of finished) {
-    const matchDate = toLocalDateISO(match.utc_date)
-    for (const player of players) {
-      const picks = await getPlayerPicks(player.id)
-      const pick  = picks.find(p => p.pick_date === matchDate && p.match_id === match.id)
-      if (pick && pick.result === null) {
-        const result    = resolveResult(match, pick.team_id)
-        const livesLost = computeLivesLost(result, pick.is_repeat, pick.phase)
-        await updatePickResult(pick.id, result, livesLost)
-      }
+
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    for (const pick of picks) {
+      if (pick.result !== null) continue           // já processado
+      if (pick.team_name === 'no_pick') continue   // tratado em processNoPicks
+
+      const cPick = canonName(pick.team_name)
+      // Acha o jogo FINALIZADO do dia da pick onde o time escolhido jogou
+      const match = finished.find(m => {
+        if (toLocalDateISO(m.utc_date) !== pick.pick_date) return false
+        const cH = canonName(m.home_team), cA = canonName(m.away_team)
+        return cH === cPick || cA === cPick
+      })
+      if (!match) continue
+
+      // Resolve o resultado pelo NOME (não pelo id volátil)
+      const cH = canonName(match.home_team), cA = canonName(match.away_team)
+      let result
+      if (match.winner === 'DRAW') result = 'draw'
+      else if (match.winner === 'HOME_TEAM') result = (cH === cPick) ? 'win' : 'loss'
+      else if (match.winner === 'AWAY_TEAM') result = (cA === cPick) ? 'win' : 'loss'
+      else continue
+
+      const livesLost = computeLivesLost(result, pick.is_repeat, pick.phase)
+      await updatePickResult(pick.id, result, livesLost)
     }
   }
+}
+
+
+// ─── Inserção manual de resultado (organizador) ──────────────
+// Define o placar de um jogo pelo nome dos times e reprocessa todas as picks.
+export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awayScore, players) {
+  const allMatches = await getMatches()
+  const cH = canonName(homeTeam), cA = canonName(awayTeam)
+  const match = allMatches.find(m => {
+    const mH = canonName(m.home_team), mA = canonName(m.away_team)
+    return (mH === cH && mA === cA) || (mH === cA && mA === cH)
+  })
+  if (!match) throw new Error(`Jogo não encontrado: ${homeTeam} x ${awayTeam}`)
+
+  // Garante orientação correta do placar (caso ache invertido)
+  const mH = canonName(match.home_team)
+  let hs = homeScore, as = awayScore
+  if (mH === cA) { hs = awayScore; as = homeScore }
+
+  const winner = hs > as ? 'HOME_TEAM' : as > hs ? 'AWAY_TEAM' : 'DRAW'
+  await supabase.from('matches')
+    .update({ home_score: hs, away_score: as, winner, status: 'FINISHED' })
+    .eq('id', match.id)
+
+  // Reprocessa picks e no-picks
+  await syncResults(players)
+  const ms = await getMatches()
+  await processNoPicks(players, ms)
+  return { match: `${match.home_team} ${hs}-${as} ${match.away_team}` }
 }
 
 // ─── Sem pick = perde vida ────────────────────────────────────

@@ -132,22 +132,24 @@ export default function Dashboard({ player }) {
 
   useEffect(() => { load() }, [player.id])
 
-  // Auto-sync every 3 minutes when Copa is live
+  // Auto-sync: ao montar e a cada 60s — busca scores, processa picks e no-picks
   useEffect(() => {
-    const id = setInterval(async () => {
+    let alive = true
+    async function autoSync() {
       try {
+        const players = await getPlayers()
+        await syncResults(players)              // scores ESPN + resolve picks
         const ms = await getMatches()
-        const hasLive = ms.some(m => m.status==='IN_PLAY'||m.status==='PAUSED')
-        const hasFin  = ms.some(m => m.status==='FINISHED')
-        if (hasLive || hasFin) {
-          const { syncResults } = await import('../lib/football')
-          const players = await getPlayers()
-          await syncResults(players)
-          await load()
-        }
+        await processNoPicks(players, ms)        // quem não pickou perde vida
+        if (alive) await load()
       } catch(e) { console.warn('auto-sync:', e.message) }
-    }, 3 * 60 * 1000)
-    return () => clearInterval(id)
+    }
+    autoSync()                                   // roda imediatamente ao abrir
+    const id = setInterval(autoSync, 60 * 1000)  // e a cada 60 segundos
+    // Re-sincroniza quando o app volta ao foco
+    const onVis = () => { if (document.visibilityState === 'visible') autoSync() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { alive = false; clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
   }, [])
 
   async function load() {

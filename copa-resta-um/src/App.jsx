@@ -7,6 +7,7 @@ import Calendar from './pages/Calendar'
 import Rankings from './pages/Rankings'
 import Profile from './pages/Profile'
 import Chat from './pages/Chat'
+import Admin from './pages/Admin'
 import Navbar from './components/Navbar'
 import InstallButton from './components/InstallButton'
 import './index.css'
@@ -35,6 +36,7 @@ export default function App() {
           <Route path="/profile"     element={<Profile player={player}/>}/>
           <Route path="/profile/:id" element={<ProfileById player={player}/>}/>
           <Route path="/chat"        element={<Chat player={player}/>}/>
+          <Route path="/admin"       element={<Admin player={player}/>}/>
           <Route path="*"            element={<Navigate to="/dashboard" replace/>}/>
         </Routes>
       </main>

@@ -1,0 +1,143 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
+import { getMatches, getPlayers } from '../lib/supabase'
+import { setMatchResultManual, syncMatches, syncResults, processNoPicks } from '../lib/football'
+import { toLocalDateISO } from '../lib/gameLogic'
+
+// Tela de organizador — acessível em /admin. Permite inserir placares manualmente
+// caso a API não atualize, e forçar re-sincronização completa.
+export default function Admin({ player }) {
+  const navigate = useNavigate()
+  const [matches, setMatches] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy]       = useState(false)
+  const [msg, setMsg]         = useState('')
+  const [scores, setScores]   = useState({})
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const ms = await getMatches()
+    ms.sort((a,b) => new Date(a.utc_date) - new Date(b.utc_date))
+    setMatches(ms)
+    setLoading(false)
+  }
+
+  async function saveResult(m) {
+    const s = scores[m.id] || {}
+    if (s.h === undefined || s.a === undefined || s.h === '' || s.a === '') {
+      setMsg('Preencha os dois placares.'); return
+    }
+    setBusy(true); setMsg('')
+    try {
+      const players = await getPlayers()
+      const r = await setMatchResultManual(m.home_team, m.away_team, Number(s.h), Number(s.a), players)
+      setMsg(`✓ Salvo: ${r.match}`)
+      await load()
+    } catch(e) { setMsg('Erro: ' + e.message) }
+    finally { setBusy(false) }
+  }
+
+  async function forceFullSync() {
+    setBusy(true); setMsg('Sincronizando tudo...')
+    try {
+      const players = await getPlayers()
+      await syncMatches()
+      await syncResults(players)
+      const ms = await getMatches()
+      await processNoPicks(players, ms)
+      await load()
+      setMsg('✓ Sincronização completa!')
+    } catch(e) { setMsg('Erro: ' + e.message) }
+    finally { setBusy(false) }
+  }
+
+  if (loading) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'60vh'}}>
+      <RefreshCw size={28} style={{animation:'spin 1s linear infinite'}} color="#9CA3AF"/>
+    </div>
+  )
+
+  const today = toLocalDateISO(new Date().toISOString())
+  // Mostra jogos de ontem/hoje e próximos, priorizando não-finalizados recentes
+  const relevant = matches.filter(m => {
+    const d = toLocalDateISO(m.utc_date)
+    return d <= today || m.status !== 'FINISHED'
+  }).slice(0, 30)
+
+  return (
+    <div style={{maxWidth:480,margin:'0 auto',padding:'16px 16px 90px'}}>
+      <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
+        <button onClick={()=>navigate('/dashboard')}
+          style={{width:36,height:36,borderRadius:'50%',border:'1px solid rgba(0,0,0,.1)',
+            background:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <ArrowLeft size={18}/>
+        </button>
+        <div>
+          <div style={{fontFamily:'Sora',fontWeight:800,fontSize:20,color:'#1A3D28'}}>Painel do Organizador</div>
+          <div style={{fontFamily:'Inter',fontSize:12,color:'#9CA3AF'}}>Inserir resultados e sincronizar</div>
+        </div>
+      </div>
+
+      <button onClick={forceFullSync} disabled={busy}
+        style={{width:'100%',padding:'14px',borderRadius:12,border:'none',marginBottom:16,
+          background:'linear-gradient(135deg,#1A3D28,#1E5235)',color:'#fff',
+          fontFamily:'Sora',fontWeight:700,fontSize:13,letterSpacing:'.04em',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <RefreshCw size={15} style={busy?{animation:'spin 1s linear infinite'}:{}}/>
+        FORÇAR SINCRONIZAÇÃO COMPLETA
+      </button>
+
+      {msg && (
+        <div style={{background:msg.startsWith('✓')?'#EBF5EE':msg.startsWith('Erro')?'#FEF0EF':'#FFF8E6',
+          borderRadius:10,padding:'10px 14px',fontSize:13,marginBottom:16,fontFamily:'Inter',
+          color:msg.startsWith('✓')?'#1A3D28':msg.startsWith('Erro')?'#C4302B':'#A07830'}}>
+          {msg}
+        </div>
+      )}
+
+      <div style={{fontFamily:'Sora',fontWeight:700,fontSize:11,letterSpacing:'.08em',
+        textTransform:'uppercase',color:'#9CA3AF',marginBottom:10}}>Jogos</div>
+
+      {relevant.map(m => {
+        const s = scores[m.id] || {}
+        const done = m.status === 'FINISHED' && m.winner
+        return (
+          <div key={m.id} style={{background:'#fff',borderRadius:12,padding:'12px 14px',marginBottom:8,
+            border:`1px solid ${done?'rgba(26,61,40,.2)':'rgba(0,0,0,.08)'}`,
+            boxShadow:'0 1px 4px rgba(0,0,0,.04)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,color:'#9CA3AF',letterSpacing:'.05em'}}>
+                {toLocalDateISO(m.utc_date)} {done?'· FINALIZADO':''}
+              </span>
+              {done && <Check size={14} color="#1A3D28"/>}
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{flex:1,fontFamily:'Sora',fontWeight:600,fontSize:13,textAlign:'right'}}>{m.home_team}</span>
+              <input type="number" min="0" inputMode="numeric"
+                value={s.h !== undefined ? s.h : (m.home_score ?? '')}
+                onChange={e=>setScores({...scores,[m.id]:{...s,h:e.target.value}})}
+                style={{width:42,padding:'8px',borderRadius:8,border:'1.5px solid rgba(0,0,0,.12)',
+                  textAlign:'center',fontFamily:'Sora',fontWeight:700,fontSize:16}}/>
+              <span style={{color:'#9CA3AF',fontWeight:700}}>×</span>
+              <input type="number" min="0" inputMode="numeric"
+                value={s.a !== undefined ? s.a : (m.away_score ?? '')}
+                onChange={e=>setScores({...scores,[m.id]:{...s,a:e.target.value}})}
+                style={{width:42,padding:'8px',borderRadius:8,border:'1.5px solid rgba(0,0,0,.12)',
+                  textAlign:'center',fontFamily:'Sora',fontWeight:700,fontSize:16}}/>
+              <span style={{flex:1,fontFamily:'Sora',fontWeight:600,fontSize:13}}>{m.away_team}</span>
+            </div>
+            <button onClick={()=>saveResult(m)} disabled={busy}
+              style={{width:'100%',marginTop:8,padding:'8px',borderRadius:8,border:'none',
+                background:done?'#EBF5EE':'#C9A44A',color:done?'#1A3D28':'#fff',
+                fontFamily:'Sora',fontWeight:700,fontSize:11,letterSpacing:'.04em',cursor:'pointer'}}>
+              {done?'ATUALIZAR PLACAR':'SALVAR RESULTADO'}
+            </button>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
