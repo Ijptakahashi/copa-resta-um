@@ -34,7 +34,7 @@ function teamId(name) {
 function parseOpenfootball(json) {
   const rows = []; let id = 1001
   for (const match of (json.matches || [])) {
-    const { date, time, team1, team2, group, round, score } = match
+    const { date, time, team1, team2, group, round, score, score1, score2 } = match
     if (!team1 || !team2 || !date) continue
 
     let utc_date
@@ -60,12 +60,17 @@ function parseOpenfootball(json) {
     else if (r.includes('final') && !r.includes('semi') && !r.includes('quarter') && !r.includes('round')) stage = 'FINAL'
 
     let home_score = null, away_score = null, winner = null, status = 'SCHEDULED'
-    if (score && typeof score === 'string') {
-      const parts = score.split('-').map(s => parseInt(s.trim()))
-      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-        home_score = parts[0]; away_score = parts[1]; status = 'FINISHED'
-        winner = home_score > away_score ? 'HOME_TEAM' : away_score > home_score ? 'AWAY_TEAM' : 'DRAW'
+    // openfootball 2026 usa score:{ ft:[h,a], ht:[h,a] }
+    if (score && score.ft && Array.isArray(score.ft) && score.ft.length === 2) {
+      const [h, a] = score.ft
+      if (typeof h === 'number' && typeof a === 'number') {
+        home_score = h; away_score = a; status = 'FINISHED'
+        winner = h > a ? 'HOME_TEAM' : a > h ? 'AWAY_TEAM' : 'DRAW'
       }
+    } else if (typeof score1 === 'number' && typeof score2 === 'number') {
+      // formato alternativo score1/score2
+      home_score = score1; away_score = score2; status = 'FINISHED'
+      winner = score1 > score2 ? 'HOME_TEAM' : score2 > score1 ? 'AWAY_TEAM' : 'DRAW'
     }
 
     rows.push({
@@ -215,22 +220,20 @@ export async function syncMatches() {
 }
 
 // ─── Atualiza resultados das picks ───────────────────────────
-export async function syncResults(players) {
-  const allMatches = await getMatches()
-  // 1. Atualiza scores de todas as fontes
-  await updateAllScores(allMatches)
-  // 2. Recarrega com scores atualizados
-  const updated = await getMatches()
+// Processa picks com base nos jogos JÁ FINALIZADOS no banco
+// (não busca scores — funciona com resultado de API OU inserido manualmente)
+export async function processPicks(players) {
+  const updated  = await getMatches()
   const finished = updated.filter(m => m.status === 'FINISHED' && m.winner)
+  let processed = 0
 
   for (const player of players) {
     const picks = await getPlayerPicks(player.id)
     for (const pick of picks) {
-      if (pick.result !== null) continue           // já processado
-      if (pick.team_name === 'no_pick') continue   // tratado em processNoPicks
+      if (pick.result !== null) continue
+      if (pick.team_name === 'no_pick') continue
 
       const cPick = canonName(pick.team_name)
-      // Acha o jogo FINALIZADO do dia da pick onde o time escolhido jogou
       const match = finished.find(m => {
         if (toLocalDateISO(m.utc_date) !== pick.pick_date) return false
         const cH = canonName(m.home_team), cA = canonName(m.away_team)
@@ -238,7 +241,6 @@ export async function syncResults(players) {
       })
       if (!match) continue
 
-      // Resolve o resultado pelo NOME (não pelo id volátil)
       const cH = canonName(match.home_team), cA = canonName(match.away_team)
       let result
       if (match.winner === 'DRAW') result = 'draw'
@@ -248,8 +250,19 @@ export async function syncResults(players) {
 
       const livesLost = computeLivesLost(result, pick.is_repeat, pick.phase)
       await updatePickResult(pick.id, result, livesLost)
+      processed++
     }
   }
+  return processed
+}
+
+export async function syncResults(players) {
+  // 1. Tenta atualizar scores das APIs (pode falhar — tudo bem)
+  const allMatches = await getMatches()
+  await updateAllScores(allMatches)
+  // 2. Processa picks com base no que estiver FINISHED no banco
+  //    (resultado de API OU inserido manualmente no /admin ou SQL)
+  return await processPicks(players)
 }
 
 

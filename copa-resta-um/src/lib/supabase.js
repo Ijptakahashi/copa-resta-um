@@ -72,7 +72,30 @@ export async function getMatches() {
 }
 
 export async function upsertMatches(matches) {
-  const { error } = await supabase.from('matches').upsert(matches, { onConflict: 'id' })
+  // Busca jogos já finalizados para NÃO sobrescrever resultados existentes
+  const { data: existing } = await supabase
+    .from('matches').select('id, home_team, away_team, status, home_score, away_score, winner')
+
+  const existingByKey = {}
+  ;(existing || []).forEach(m => {
+    const k = `${m.home_team}|${m.away_team}`.toLowerCase()
+    existingByKey[k] = m
+  })
+
+  // Para cada jogo novo, se já existe um FINISHED com placar, preserva o resultado
+  const safe = matches.map(m => {
+    const k = `${m.home_team}|${m.away_team}`.toLowerCase()
+    const prev = existingByKey[k]
+    if (prev && prev.status === 'FINISHED' && prev.winner) {
+      // mantém o resultado já gravado, só atualiza metadados do fixture
+      return { ...m, id: prev.id, status: 'FINISHED',
+               home_score: prev.home_score, away_score: prev.away_score, winner: prev.winner }
+    }
+    if (prev) return { ...m, id: prev.id }   // reaproveita o id estável do banco
+    return m
+  })
+
+  const { error } = await supabase.from('matches').upsert(safe, { onConflict: 'id' })
   if (error) throw error
 }
 

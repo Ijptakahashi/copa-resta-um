@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
 import { getMatches, getPlayers } from '../lib/supabase'
-import { setMatchResultManual, syncMatches, syncResults, processNoPicks } from '../lib/football'
+import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks } from '../lib/football'
 import { toLocalDateISO } from '../lib/gameLogic'
 
 // Tela de organizador — acessível em /admin. Permite inserir placares manualmente
@@ -35,6 +35,18 @@ export default function Admin({ player }) {
       const players = await getPlayers()
       const r = await setMatchResultManual(m.home_team, m.away_team, Number(s.h), Number(s.a), players)
       setMsg(`✓ Salvo: ${r.match}`)
+      await load()
+    } catch(e) { setMsg('Erro: ' + e.message) }
+    finally { setBusy(false) }
+  }
+
+  async function reprocessPicks() {
+    setBusy(true); setMsg('Reprocessando picks...')
+    try {
+      const players = await getPlayers()
+      const n = await processPicks(players)
+      await processNoPicks(players, await getMatches())
+      setMsg(`✓ ${n} pick(s) processada(s)!`)
       await load()
     } catch(e) { setMsg('Erro: ' + e.message) }
     finally { setBusy(false) }
@@ -82,12 +94,20 @@ export default function Admin({ player }) {
       </div>
 
       <button onClick={forceFullSync} disabled={busy}
-        style={{width:'100%',padding:'14px',borderRadius:12,border:'none',marginBottom:16,
+        style={{width:'100%',padding:'14px',borderRadius:12,border:'none',marginBottom:8,
           background:'linear-gradient(135deg,#1A3D28,#1E5235)',color:'#fff',
           fontFamily:'Sora',fontWeight:700,fontSize:13,letterSpacing:'.04em',cursor:'pointer',
           display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
         <RefreshCw size={15} style={busy?{animation:'spin 1s linear infinite'}:{}}/>
-        FORÇAR SINCRONIZAÇÃO COMPLETA
+        FORÇAR SINCRONIZAÇÃO (API + PICKS)
+      </button>
+      <button onClick={reprocessPicks} disabled={busy}
+        style={{width:'100%',padding:'12px',borderRadius:12,border:'1.5px solid #1A3D28',marginBottom:16,
+          background:'#fff',color:'#1A3D28',
+          fontFamily:'Sora',fontWeight:700,fontSize:12,letterSpacing:'.04em',cursor:'pointer',
+          display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+        <Check size={14}/>
+        REPROCESSAR PICKS (usa resultados já no banco)
       </button>
 
       {msg && (
