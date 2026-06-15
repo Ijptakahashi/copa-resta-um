@@ -17,9 +17,20 @@ function ProfileById({ player }) {
   return <Profile player={player} viewPlayerId={id}/>
 }
 
+// Aumente este número para deslogar TODOS os usuários no próximo carregamento.
+const SESSION_VERSION = '2'
+
 export default function App() {
   const [player, setPlayer] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('copa_player')) } catch { return null }
+    try {
+      // Se a versão da sessão mudou, força logout (limpa login antigo)
+      if (localStorage.getItem('copa_session_v') !== SESSION_VERSION) {
+        localStorage.removeItem('copa_player')
+        localStorage.setItem('copa_session_v', SESSION_VERSION)
+        return null
+      }
+      return JSON.parse(localStorage.getItem('copa_player'))
+    } catch { return null }
   })
   if (!player) return <Login onLogin={setPlayer}/>
   return (

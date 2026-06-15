@@ -5,6 +5,14 @@ import { getMatches, getPlayers } from '../lib/supabase'
 import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks } from '../lib/football'
 import { toLocalDateISO } from '../lib/gameLogic'
 
+// Normaliza nomes p/ deduplicar jogos iguais com grafias diferentes
+function canonName(n='') {
+  const map = {'czechia':'czech republic','korea republic':'south korea','korea rep.':'south korea',
+    'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
+    'usa':'united states','türkiye':'turkey','curaçao':'curacao','congo dr':'dr congo'}
+  const s=String(n).toLowerCase().trim(); return map[s]||s
+}
+
 // Tela de organizador — acessível em /admin. Permite inserir placares manualmente
 // caso a API não atualize, e forçar re-sincronização completa.
 export default function Admin({ player }) {
@@ -74,10 +82,23 @@ export default function Admin({ player }) {
 
   const today = toLocalDateISO(new Date().toISOString())
   // Mostra jogos de ontem/hoje e próximos, priorizando não-finalizados recentes
-  const relevant = matches.filter(m => {
+  // Deduplica jogos: mesma data + mesmos times (canônico), preferindo o FINISHED
+  const seen = {}
+  matches.forEach(m => {
+    const d = toLocalDateISO(m.utc_date)
+    const teams = [canonName(m.home_team), canonName(m.away_team)].sort().join('|')
+    const key = `${d}|${teams}`
+    const prev = seen[key]
+    if (!prev) { seen[key] = m; return }
+    // Prefere o que já está FINISHED (tem placar), senão mantém o primeiro
+    const score = x => (x.status==='FINISHED' && x.winner ? 2 : 0) +
+                       (x.home_score!=null ? 1 : 0)
+    if (score(m) > score(prev)) seen[key] = m
+  })
+  const relevant = Object.values(seen).filter(m => {
     const d = toLocalDateISO(m.utc_date)
     return d <= today || m.status !== 'FINISHED'
-  }).slice(0, 30)
+  }).sort((a,b)=>new Date(a.utc_date)-new Date(b.utc_date)).slice(0, 40)
 
   return (
     <div style={{maxWidth:480,margin:'0 auto',padding:'16px 16px 90px'}}>

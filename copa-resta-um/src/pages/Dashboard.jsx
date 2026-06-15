@@ -42,7 +42,10 @@ function Countdown({ target, style: extraStyle={} }) {
 // Today's picks reveal panel
 function TodayPicksReveal({ todayMs, allPlayers, allPicks, today }) {
   const deadline = pickDeadline(todayMs)
-  const open = isPickOpen(todayMs)
+  // TRAVA DUPLA: só revela se existe deadline E ele já passou de verdade.
+  // Qualquer ambiguidade → mantém OCULTO (open=true).
+  const revealed = !!deadline && new Date() >= deadline
+  const open = !revealed
   if (!todayMs.length || !allPlayers.length) return null
 
   return (

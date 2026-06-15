@@ -226,13 +226,16 @@ export function todayBrasilia() {
 // Check if picks are still open for a game day (before first kick-off)
 export function pickDeadline(dayMatches) {
   if (!dayMatches || dayMatches.length === 0) return null
-  const earliest = dayMatches.reduce((min, m) => new Date(m.utc_date) < new Date(min.utc_date) ? m : min)
-  return new Date(new Date(earliest.utc_date).getTime() - 30 * 60 * 1000)
+  const valid = dayMatches.map(m => new Date(m.utc_date)).filter(d => !isNaN(d.getTime()))
+  if (valid.length === 0) return null
+  const earliest = valid.reduce((min, d) => d < min ? d : min, valid[0])
+  return new Date(earliest.getTime() - 30 * 60 * 1000)
 }
 
 export function isPickOpen(dayMatches) {
   const dl = pickDeadline(dayMatches)
-  if (!dl) return false
+  // FAIL-SAFE: sem deadline calculável = assume ABERTO (esconde picks alheias)
+  if (!dl) return true
   return new Date() < dl
 }
 

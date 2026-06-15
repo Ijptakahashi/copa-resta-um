@@ -271,21 +271,24 @@ export async function syncResults(players) {
 export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awayScore, players) {
   const allMatches = await getMatches()
   const cH = canonName(homeTeam), cA = canonName(awayTeam)
-  const match = allMatches.find(m => {
+  // Pega TODAS as cópias desse jogo (caso haja duplicatas no banco)
+  const copies = allMatches.filter(m => {
     const mH = canonName(m.home_team), mA = canonName(m.away_team)
     return (mH === cH && mA === cA) || (mH === cA && mA === cH)
   })
-  if (!match) throw new Error(`Jogo não encontrado: ${homeTeam} x ${awayTeam}`)
+  if (copies.length === 0) throw new Error(`Jogo não encontrado: ${homeTeam} x ${awayTeam}`)
 
-  // Garante orientação correta do placar (caso ache invertido)
-  const mH = canonName(match.home_team)
-  let hs = homeScore, as = awayScore
-  if (mH === cA) { hs = awayScore; as = homeScore }
-
-  const winner = hs > as ? 'HOME_TEAM' : as > hs ? 'AWAY_TEAM' : 'DRAW'
-  await supabase.from('matches')
-    .update({ home_score: hs, away_score: as, winner, status: 'FINISHED' })
-    .eq('id', match.id)
+  // Atualiza cada cópia respeitando a orientação casa/fora dela
+  for (const m of copies) {
+    const mH = canonName(m.home_team)
+    let hs = homeScore, as = awayScore
+    if (mH === cA) { hs = awayScore; as = homeScore }
+    const winner = hs > as ? 'HOME_TEAM' : as > hs ? 'AWAY_TEAM' : 'DRAW'
+    await supabase.from('matches')
+      .update({ home_score: hs, away_score: as, winner, status: 'FINISHED' })
+      .eq('id', m.id)
+  }
+  const match = copies[0]
 
   // Reprocessa picks e no-picks
   await syncResults(players)
