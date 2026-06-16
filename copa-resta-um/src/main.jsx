@@ -33,7 +33,13 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (refreshing) return
       refreshing = true
-      window.location.reload()
+      // Limpa todos os caches antes de recarregar (mata versões presas)
+      if ('caches' in window) {
+        caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
+          .finally(() => window.location.reload())
+      } else {
+        window.location.reload()
+      }
     })
   })
 

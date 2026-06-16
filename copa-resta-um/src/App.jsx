@@ -18,7 +18,7 @@ function ProfileById({ player }) {
 }
 
 // Aumente este número para deslogar TODOS os usuários no próximo carregamento.
-const SESSION_VERSION = '2'
+const SESSION_VERSION = '3'
 
 export default function App() {
   const [player, setPlayer] = useState(() => {

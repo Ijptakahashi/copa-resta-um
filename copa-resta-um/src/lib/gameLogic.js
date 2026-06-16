@@ -120,16 +120,18 @@ export function isEliminated(picks) {
 // ─── Team inventory ──────────────────────────────────────────
 
 // available | unlocked | burned
-export function getTeamStatus(picks, teamId) {
-  const used = picks.filter(p => p.team_id === teamId && p.result !== null && p.result !== 'no_pick')
+export function getTeamStatus(picks, teamId, currentPickDate) {
+  // Considera TODAS as picks do time (inclusive pendentes), exceto a do dia em edição
+  const used = picks.filter(p =>
+    p.team_id === teamId && p.team_name !== 'no_pick' && p.pick_date !== currentPickDate)
   if (used.length === 0) return 'available'
-  // Perdeu quando escolhida = queimada pra sempre
+  // Perdeu = queimada pra sempre
   if (used.some(p => p.result === 'loss')) return 'burned'
-  // Já usada no mata-mata (venceu/empatou) = não pode mais reutilizar
-  const usedInKnockout = used.some(p => p.phase !== 'groups')
-  if (usedInKnockout) return 'burned'
-  // Venceu/empatou nos grupos = liberada para UMA reutilização no mata-mata
-  return 'unlocked'
+  // Já escolhida nos grupos (pendente ou ganha/empate) = não pode repetir nos grupos
+  if (used.some(p => p.phase === 'groups')) return 'burned'
+  // Já usada no mata-mata = não pode reutilizar
+  if (used.some(p => p.phase !== 'groups')) return 'burned'
+  return 'available'
 }
 
 // Returns all teams with their status for a player
@@ -150,7 +152,17 @@ export function buildInventory(picks) {
 
 // ─── Pick validation ─────────────────────────────────────────
 
-export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch) {
+
+// Normaliza nome de time para comparação robusta (grafias diferentes = mesmo time)
+function canonTeam(n='') {
+  const map = {'czechia':'czech republic','korea republic':'south korea','korea rep.':'south korea',
+    'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
+    'usa':'united states','türkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
+    'ir iran':'iran'}
+  const s=String(n).toLowerCase().trim(); return map[s]||s
+}
+
+export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch, currentPickDate) {
   if (!todayMatch) return { valid: false, reason: 'Sem jogo hoje.' }
 
   // Mata-mata ainda não liberado — picks só na fase de grupos por enquanto.
@@ -158,26 +170,29 @@ export function validatePick(playerPicks, teamId, teamName, currentPhase, todayM
     return { valid: false, reason: 'As picks do mata-mata serão liberadas quando a fase começar.' }
   }
 
-  const used = playerPicks.filter(p =>
-    p.team_id === teamId && p.result !== null && p.result !== 'no_pick')
+  // TODAS as picks anteriores desse time (mesmo SEM resultado ainda / pendentes),
+  // exceto as que foram 'no_pick'. Comparação por NOME canônico + id (robusto).
+  const cTeam = canonTeam(teamName)
+  const usedAll = playerPicks.filter(p =>
+    p.team_name !== 'no_pick' &&
+    p.pick_date !== currentPickDate &&    // ignora a pick do próprio dia (permite trocar)
+    (p.team_id === teamId || canonTeam(p.team_name) === cTeam))
 
-  // Perdeu quando escolhida = queimada pra sempre, em qualquer fase
-  if (used.some(p => p.result === 'loss')) {
+  // Perdeu quando escolhida = queimada pra sempre
+  if (usedAll.some(p => p.result === 'loss')) {
     return { valid: false, reason: `${teamName} está QUEIMADA — perdeu quando você a escolheu.` }
   }
 
   if (currentPhase === 'groups') {
-    // Não pode repetir nos grupos
-    if (used.some(p => p.phase === 'groups')) {
-      return { valid: false, reason: `${teamName} já foi usada na fase de grupos. Não é permitido repetir.` }
+    // Não pode repetir nos grupos — conta QUALQUER pick anterior (pendente ou não)
+    // que NÃO seja deste mesmo dia (poder trocar a pick de hoje é permitido)
+    if (usedAll.some(p => p.phase === 'groups')) {
+      return { valid: false, reason: `${teamName} já foi escolhida na fase de grupos. Não pode repetir.` }
     }
   } else {
-    // Mata-mata: não pode repetir time já usado no mata-mata (qualquer fase do MM)
-    if (used.some(p => p.phase !== 'groups')) {
+    if (usedAll.some(p => p.phase !== 'groups')) {
       return { valid: false, reason: `${teamName} já foi usada no mata-mata. Não pode escolher de novo.` }
     }
-    // Pode usar: time liberado dos grupos (venceu/empatou) OU nunca usado.
-    // Esta é a única reutilização permitida — uma vez no MM.
   }
   return { valid: true }
 }
@@ -211,16 +226,15 @@ export function toLocalDate(utcDate) {
 }
 
 export function toLocalDateISO(utcDate) {
+  // Data no fuso de São Paulo, independente do fuso do dispositivo do usuário
   const d = new Date(utcDate)
-  // Convert to Brasilia timezone (UTC-3)
-  const brasilia = new Date(d.getTime() - 3 * 60 * 60 * 1000)
-  return brasilia.toISOString().slice(0, 10)
+  if (isNaN(d.getTime())) return ''
+  // en-CA dá formato YYYY-MM-DD; timeZone fixa o fuso correto
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 }
 
 export function todayBrasilia() {
-  const now = new Date()
-  const brasilia = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  return brasilia.toISOString().slice(0, 10)
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 }
 
 // Check if picks are still open for a game day (before first kick-off)

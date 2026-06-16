@@ -35,14 +35,22 @@ export default function Admin({ player }) {
 
   async function saveResult(m) {
     const s = scores[m.id] || {}
-    if (s.h === undefined || s.a === undefined || s.h === '' || s.a === '') {
+    // Usa o valor digitado OU o que já está no banco (input mostra o do banco)
+    const hRaw = s.h !== undefined && s.h !== '' ? s.h : m.home_score
+    const aRaw = s.a !== undefined && s.a !== '' ? s.a : m.away_score
+    if (hRaw === undefined || hRaw === null || hRaw === '' ||
+        aRaw === undefined || aRaw === null || aRaw === '') {
       setMsg('Preencha os dois placares.'); return
     }
+    const hNum = Number(hRaw), aNum = Number(aRaw)
+    if (isNaN(hNum) || isNaN(aNum)) { setMsg('Placar inválido.'); return }
     setBusy(true); setMsg('')
     try {
       const players = await getPlayers()
-      const r = await setMatchResultManual(m.home_team, m.away_team, Number(s.h), Number(s.a), players)
+      const r = await setMatchResultManual(m.home_team, m.away_team, hNum, aNum, players)
       setMsg(`✓ Salvo: ${r.match}`)
+      // Limpa o state local desse jogo pra próxima edição ler do banco atualizado
+      setScores(prev => { const n = {...prev}; delete n[m.id]; return n })
       await load()
     } catch(e) { setMsg('Erro: ' + e.message) }
     finally { setBusy(false) }

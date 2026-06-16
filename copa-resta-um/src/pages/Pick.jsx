@@ -266,7 +266,7 @@ export default function Pick({ player }) {
         {/* Pick form */}
         {dayMs.length>0 && canPick && !eliminated && dayMs.map(match => {
           function TeamCard({ teamId, teamName, matchId }) {
-            const status = getTeamStatus(picks, teamId)
+            const status = getTeamStatus(picks, teamId, selDate)
             const burned = status === 'burned'
             const isSelected = selected?.teamId === teamId
             return (
@@ -275,7 +275,7 @@ export default function Pick({ player }) {
                   if (burned) return
                   if (isSelected) { setSel(null); setError(''); return }
                   const phase = STAGE_TO_PHASE[dayMs[0]?.stage] || 'groups'
-                  const v = validatePick(picks, teamId, teamName, phase, dayMs[0])
+                  const v = validatePick(picks, teamId, teamName, phase, dayMs[0], selDate)
                   if (!v.valid) { setError(v.reason); setSel(null); return }
                   setError(v.warning || ''); setSel({ teamId, teamName, matchId })
                 }}
