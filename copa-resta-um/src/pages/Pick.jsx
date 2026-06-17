@@ -266,35 +266,37 @@ export default function Pick({ player }) {
         {/* Pick form */}
         {dayMs.length>0 && canPick && !eliminated && dayMs.map(match => {
           function TeamCard({ teamId, teamName, matchId }) {
-            const status = getTeamStatus(picks, teamId, selDate)
+            const status = getTeamStatus(picks, teamId, selDate, teamName)
             const burned = status === 'burned'
+            const preselected = status === 'preselected'
+            const blocked = burned || preselected   // ambos impedem nova seleção
             const isSelected = selected?.teamId === teamId
             return (
               <button
                 onClick={() => {
-                  if (burned) return
+                  if (blocked) return
                   if (isSelected) { setSel(null); setError(''); return }
                   const phase = STAGE_TO_PHASE[dayMs[0]?.stage] || 'groups'
                   const v = validatePick(picks, teamId, teamName, phase, dayMs[0], selDate)
                   if (!v.valid) { setError(v.reason); setSel(null); return }
                   setError(v.warning || ''); setSel({ teamId, teamName, matchId })
                 }}
-                disabled={burned}
-                style={{flex:1,padding:'16px 8px',borderRadius:14,cursor:burned?'not-allowed':'pointer',
-                  border:`2px solid ${isSelected?'#1A3D28':burned?'rgba(196,48,43,.3)':'rgba(0,0,0,.07)'}`,
-                  background:isSelected?'rgba(26,61,40,.04)':burned?'#FEF5F5':'#fff',
+                disabled={blocked}
+                style={{flex:1,padding:'16px 8px',borderRadius:14,cursor:blocked?'not-allowed':'pointer',
+                  border:`2px solid ${isSelected?'#1A3D28':burned?'rgba(196,48,43,.3)':preselected?'rgba(201,164,74,.4)':'rgba(0,0,0,.07)'}`,
+                  background:isSelected?'rgba(26,61,40,.04)':burned?'#FEF5F5':preselected?'#FBF7EC':'#fff',
                   display:'flex',flexDirection:'column',alignItems:'center',gap:10,
-                  transition:'all .15s',opacity:burned?.6:1,
+                  transition:'all .15s',opacity:blocked?.7:1,
                   boxShadow:isSelected?'0 0 0 3px rgba(26,61,40,.1)':'0 2px 8px rgba(0,0,0,.05)'}}>
-                <FlagImage team={teamName} size="lg" grayscale={burned}/>
+                <FlagImage team={teamName} size="lg" grayscale={blocked}/>
                 <div style={{fontFamily:'Sora',fontWeight:700,fontSize:11,textTransform:'uppercase',
                   letterSpacing:'.05em',textAlign:'center'}}>{teamName}</div>
                 <div style={{padding:'4px 12px',borderRadius:20,
-                  background:burned?'#C4302B':status==='unlocked'?'#FBF5E6':'rgba(26,61,40,.08)',
-                  color:burned?'#fff':status==='unlocked'?'#A07830':'#1A3D28',
+                  background:burned?'#C4302B':preselected?'#C9A44A':'rgba(26,61,40,.08)',
+                  color:burned?'#fff':preselected?'#fff':'#1A3D28',
                   fontFamily:'Sora',fontWeight:700,fontSize:9,letterSpacing:'.06em',textTransform:'uppercase',
                   textDecoration:burned?'line-through':'none'}}>
-                  {burned?'QUEIMADO':status==='unlocked'?'LIBERADO':'DISPONÍVEL'}
+                  {burned?'QUEIMADO':preselected?'PRÉ-SELECIONADO':'DISPONÍVEL'}
                 </div>
               </button>
             )

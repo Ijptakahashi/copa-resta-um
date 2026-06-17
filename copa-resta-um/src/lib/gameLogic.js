@@ -120,18 +120,21 @@ export function isEliminated(picks) {
 // ─── Team inventory ──────────────────────────────────────────
 
 // available | unlocked | burned
-export function getTeamStatus(picks, teamId, currentPickDate) {
-  // Considera TODAS as picks do time (inclusive pendentes), exceto a do dia em edição
+export function getTeamStatus(picks, teamId, currentPickDate, teamName) {
+  // Compara por NOME canônico (o team_id pode colidir entre seleções diferentes!)
+  const cTeam = canonTeam(teamName || '')
   const used = picks.filter(p =>
-    p.team_id === teamId && p.team_name !== 'no_pick' && p.pick_date !== currentPickDate)
+    p.team_name !== 'no_pick' && p.pick_date !== currentPickDate &&
+    (canonTeam(p.team_name) === cTeam))
   if (used.length === 0) return 'available'
-  // Perdeu = queimada pra sempre
+  // Perdeu = queimada de verdade, pra sempre
   if (used.some(p => p.result === 'loss')) return 'burned'
-  // Já escolhida nos grupos (pendente ou ganha/empate) = não pode repetir nos grupos
-  if (used.some(p => p.phase === 'groups')) return 'burned'
-  // Já usada no mata-mata = não pode reutilizar
+  // Já usada no mata-mata = queimada
   if (used.some(p => p.phase !== 'groups')) return 'burned'
-  return 'available'
+  // Já usada nos grupos COM resultado (ganhou/empatou) = queimada pros grupos
+  if (used.some(p => p.phase === 'groups' && p.result !== null && p.result !== undefined)) return 'burned'
+  // Escolhida em outro dia mas SEM resultado ainda = apenas pré-selecionada (pode desmarcar)
+  return 'preselected'
 }
 
 // Returns all teams with their status for a player
@@ -176,7 +179,7 @@ export function validatePick(playerPicks, teamId, teamName, currentPhase, todayM
   const usedAll = playerPicks.filter(p =>
     p.team_name !== 'no_pick' &&
     p.pick_date !== currentPickDate &&    // ignora a pick do próprio dia (permite trocar)
-    (p.team_id === teamId || canonTeam(p.team_name) === cTeam))
+    canonTeam(p.team_name) === cTeam)
 
   // Perdeu quando escolhida = queimada pra sempre
   if (usedAll.some(p => p.result === 'loss')) {
@@ -186,8 +189,14 @@ export function validatePick(playerPicks, teamId, teamName, currentPhase, todayM
   if (currentPhase === 'groups') {
     // Não pode repetir nos grupos — conta QUALQUER pick anterior (pendente ou não)
     // que NÃO seja deste mesmo dia (poder trocar a pick de hoje é permitido)
-    if (usedAll.some(p => p.phase === 'groups')) {
-      return { valid: false, reason: `${teamName} já foi escolhida na fase de grupos. Não pode repetir.` }
+    const groupUses = usedAll.filter(p => p.phase === 'groups')
+    if (groupUses.length > 0) {
+      const playedLost = groupUses.some(p => p.result === 'loss')
+      const played = groupUses.some(p => p.result !== null && p.result !== undefined)
+      if (playedLost) return { valid: false, reason: `${teamName} está queimada — já perdeu com você.` }
+      if (played)     return { valid: false, reason: `${teamName} já foi usada na fase de grupos.` }
+      // Sem resultado ainda = pré-selecionada em outro dia
+      return { valid: false, reason: `${teamName} já está pré-selecionada para outro dia. Cada seleção só pode ser usada uma vez nos grupos.` }
     }
   } else {
     if (usedAll.some(p => p.phase !== 'groups')) {
