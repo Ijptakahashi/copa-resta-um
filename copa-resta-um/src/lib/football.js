@@ -299,23 +299,27 @@ export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awaySc
 
 // ─── Sem pick = perde vida ────────────────────────────────────
 export async function processNoPicks(players, allMatches) {
-  const finishedDays = new Set(
+  const finishedDays = [...new Set(
     allMatches.filter(m => m.status === 'FINISHED').map(m => toLocalDateISO(m.utc_date))
-  )
+  )]
   for (const player of players) {
-    const picks      = await getPlayerPicks(player.id)
-    const pickedDays = new Set(picks.map(p => p.pick_date))
+    const picks = await getPlayerPicks(player.id)
     for (const day of finishedDays) {
-      if (pickedDays.has(day)) continue
+      // Já tem QUALQUER pick nesse dia (real ou no_pick)? Então não cria nada.
+      const existing = picks.find(p => p.pick_date === day)
+      if (existing) continue
       const dayMatches = allMatches.filter(m => toLocalDateISO(m.utc_date) === day)
       if (!dayMatches.length) continue
       const match = dayMatches[0]
       const phase = STAGE_TO_PHASE[match.stage] || 'groups'
       try {
+        // Releitura de segurança imediatamente antes de inserir (evita corrida)
+        const fresh = await getPlayerPicks(player.id)
+        if (fresh.some(p => p.pick_date === day)) continue
         await submitPick({ playerId: player.id, matchId: match.id,
           teamName: 'no_pick', teamId: 0, phase, pickDate: day, isRepeat: false })
         const allP = await getPlayerPicks(player.id)
-        const p    = allP.find(pk => pk.pick_date === day)
+        const p    = allP.find(pk => pk.pick_date === day && pk.team_name === 'no_pick')
         if (p) await updatePickResult(p.id, 'no_pick', 1)
       } catch (_) {}
     }

@@ -127,16 +127,26 @@ export async function getAllPicks(date) {
 }
 
 export async function submitPick({ playerId, matchId, teamName, teamId, phase, pickDate, isRepeat }) {
-  // Check if pick already exists for this day (allow modification until deadline)
+  // Pega TODAS as picks desse dia (pode haver duplicatas por bugs antigos)
   const { data: existing } = await supabase
-    .from('picks').select('id').eq('player_id', playerId).eq('pick_date', pickDate).maybeSingle()
-  if (existing) {
+    .from('picks').select('id').eq('player_id', playerId).eq('pick_date', pickDate)
+    .order('id', { ascending: true })
+
+  if (existing && existing.length > 0) {
+    // Mantém a primeira, atualiza ela
+    const keepId = existing[0].id
     const { error } = await supabase.from('picks')
       .update({ team_name: teamName, team_id: teamId, is_repeat: isRepeat, result: null, lives_lost: 0 })
-      .eq('id', existing.id)
+      .eq('id', keepId)
     if (error) throw error
+    // Apaga eventuais duplicatas do mesmo dia
+    if (existing.length > 1) {
+      const dupeIds = existing.slice(1).map(e => e.id)
+      await supabase.from('picks').delete().in('id', dupeIds)
+    }
     return
   }
+
   const { error } = await supabase.from('picks').insert({
     player_id: playerId, match_id: matchId, team_name: teamName,
     team_id: teamId, phase, pick_date: pickDate, is_repeat: isRepeat,
