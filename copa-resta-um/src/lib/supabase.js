@@ -127,23 +127,37 @@ export async function getAllPicks(date) {
 }
 
 export async function submitPick({ playerId, matchId, teamName, teamId, phase, pickDate, isRepeat }) {
-  // Pega TODAS as picks desse dia (pode haver duplicatas por bugs antigos)
-  const { data: existing } = await supabase
-    .from('picks').select('id').eq('player_id', playerId).eq('pick_date', pickDate)
-    .order('id', { ascending: true })
+  // Pega TODAS as picks desse dia. Não apagamos duplicatas aqui para evitar perda de dados.
+  const { data: existing, error: readError } = await supabase
+    .from('picks')
+    .select('id, result, lives_lost, team_name, team_id, match_id, phase, pick_date')
+    .eq('player_id', playerId)
+    .eq('pick_date', pickDate)
+    .order('created_at', { ascending: true })
+
+  if (readError) throw readError
 
   if (existing && existing.length > 0) {
-    // Mantém a primeira, atualiza ela
-    const keepId = existing[0].id
-    const { error } = await supabase.from('picks')
-      .update({ team_name: teamName, team_id: teamId, is_repeat: isRepeat, result: null, lives_lost: 0 })
-      .eq('id', keepId)
-    if (error) throw error
-    // Apaga eventuais duplicatas do mesmo dia
-    if (existing.length > 1) {
-      const dupeIds = existing.slice(1).map(e => e.id)
-      await supabase.from('picks').delete().in('id', dupeIds)
+    const keep = existing[0]
+
+    // Nunca sobrescreve pick já processada. Isso evita que resultado/vidas voltem a zero
+    // ou que uma pick antiga seja transformada em no_pick por rotinas automáticas.
+    if (keep.result !== null) {
+      throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
     }
+
+    const { error } = await supabase.from('picks')
+      .update({
+        match_id: matchId,
+        team_name: teamName,
+        team_id: teamId,
+        phase,
+        is_repeat: isRepeat,
+      })
+      .eq('id', keep.id)
+      .is('result', null)
+
+    if (error) throw error
     return
   }
 

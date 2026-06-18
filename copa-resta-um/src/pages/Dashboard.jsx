@@ -4,7 +4,6 @@ import { ChevronRight, RefreshCw } from 'lucide-react'
 import { getPlayerPicks, getMatches, getAllPicks, getPlayers } from '../lib/supabase'
 import { computeLives, todayBrasilia, toLocalDateISO, isPickOpen,
          pickDeadline } from '../lib/gameLogic'
-import { syncMatches, syncResults, processNoPicks } from '../lib/football'
 import { ShieldIcon } from '../components/ShieldLives'
 import { countryCode } from '../components/FlagImage'
 import Avatar from '../components/Avatar'
@@ -135,25 +134,13 @@ export default function Dashboard({ player }) {
 
   useEffect(() => { load() }, [player.id])
 
-  // Auto-sync: ao montar e a cada 60s — busca scores, processa picks e no-picks
+  // Segurança: o Dashboard não deve processar resultados nem criar no_picks.
+  // Essas rotinas alteram o banco global e devem ficar restritas ao /admin.
   useEffect(() => {
-    let alive = true
-    async function autoSync() {
-      try {
-        const players = await getPlayers()
-        await syncResults(players)              // scores ESPN + resolve picks
-        const ms = await getMatches()
-        await processNoPicks(players, ms)        // quem não pickou perde vida
-        if (alive) await load()
-      } catch(e) { console.warn('auto-sync:', e.message) }
-    }
-    autoSync()                                   // roda imediatamente ao abrir
-    const id = setInterval(autoSync, 60 * 1000)  // e a cada 60 segundos
-    // Re-sincroniza quando o app volta ao foco
-    const onVis = () => { if (document.visibilityState === 'visible') autoSync() }
+    const onVis = () => { if (document.visibilityState === 'visible') load() }
     document.addEventListener('visibilitychange', onVis)
-    return () => { alive = false; clearInterval(id); document.removeEventListener('visibilitychange', onVis) }
-  }, [])
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [player.id])
 
   async function load() {
     setLoading(true)
@@ -181,11 +168,8 @@ export default function Dashboard({ player }) {
   async function handleSync() {
     setSyncing(true)
     try {
-      const players = await getPlayers()
-      await syncMatches()
-      await syncResults(players)
-      const allMs = await getMatches()
-      await processNoPicks(players, allMs)
+      // Botão de segurança: apenas recarrega os dados já existentes.
+      // Não sincroniza partidas, não processa resultados e não cria no_picks.
       await load()
     } catch(e) { console.error(e) } finally { setSyncing(false) }
   }
@@ -411,7 +395,7 @@ export default function Dashboard({ player }) {
         </div>
       )}
 
-      {/* Sync */}
+      {/* Refresh only: não altera banco */}
       <button onClick={handleSync} disabled={syncing}
         style={{width:'100%',padding:'12px',borderRadius:12,
           border:'1px solid rgba(0,0,0,.07)',background:'#fff',
@@ -420,7 +404,7 @@ export default function Dashboard({ player }) {
           alignItems:'center',justifyContent:'center',gap:6,
           boxShadow:'0 1px 4px rgba(0,0,0,.04)'}}>
         <RefreshCw size={13} style={syncing?{animation:'spin 1s linear infinite'}:{}}/>
-        {syncing ? 'ATUALIZANDO...' : 'ATUALIZAR RESULTADOS'}
+        {syncing ? 'RECARREGANDO...' : 'RECARREGAR DADOS'}
       </button>
     </div>
   )
