@@ -138,26 +138,26 @@ export async function submitPick({ playerId, matchId, teamName, teamId, phase, p
   if (readError) throw readError
 
   if (existing && existing.length > 0) {
-    const keep = existing[0]
-
-    // Nunca sobrescreve pick já processada. Isso evita que resultado/vidas voltem a zero
-    // ou que uma pick antiga seja transformada em no_pick por rotinas automáticas.
-    if (keep.result !== null) {
+    // Se alguma cópia já foi processada, preserva ela e não deixa alterar.
+    const processed = existing.find(p => p.result !== null && p.result !== undefined)
+    if (processed) {
+      // Limpa duplicatas NÃO processadas do mesmo dia (lixo de bugs antigos), mantendo a processada
+      const trash = existing.filter(p => p.id !== processed.id && (p.result === null || p.result === undefined))
+      if (trash.length) await supabase.from('picks').delete().in('id', trash.map(t => t.id))
       throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
     }
 
+    // Nenhuma processada: mantém a primeira, atualiza, e remove as outras duplicatas
+    const keep = existing[0]
     const { error } = await supabase.from('picks')
-      .update({
-        match_id: matchId,
-        team_name: teamName,
-        team_id: teamId,
-        phase,
-        is_repeat: isRepeat,
-      })
+      .update({ match_id: matchId, team_name: teamName, team_id: teamId, phase, is_repeat: isRepeat })
       .eq('id', keep.id)
       .is('result', null)
-
     if (error) throw error
+    if (existing.length > 1) {
+      const dupeIds = existing.slice(1).map(e => e.id)
+      await supabase.from('picks').delete().in('id', dupeIds)
+    }
     return
   }
 

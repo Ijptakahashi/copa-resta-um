@@ -69,6 +69,14 @@ export default function Admin({ player }) {
   }
 
   async function forceFullSync() {
+    // Trava de segurança: sync da API pode sobrescrever resultados inseridos à mão
+    const ok = window.confirm(
+      '⚠️ ATENÇÃO\n\nIsto busca os jogos das APIs externas e pode SOBRESCREVER ' +
+      'placares que você inseriu manualmente.\n\n' +
+      'Para apenas recalcular as picks (seguro), use "REPROCESSAR PICKS".\n\n' +
+      'Tem certeza que quer forçar a sincronização completa?'
+    )
+    if (!ok) return
     setBusy(true); setMsg('Sincronizando tudo...')
     try {
       const players = await getPlayers()

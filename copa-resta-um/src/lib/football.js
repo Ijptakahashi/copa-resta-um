@@ -1,7 +1,7 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline } from './gameLogic'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -299,9 +299,20 @@ export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awaySc
 
 // ─── Sem pick = perde vida ────────────────────────────────────
 export async function processNoPicks(players, allMatches) {
-  const finishedDays = [...new Set(
-    allMatches.filter(m => m.status === 'FINISHED').map(m => toLocalDateISO(m.utc_date))
-  )]
+  // Agrupa jogos por dia
+  const byDay = {}
+  allMatches.forEach(m => {
+    const d = toLocalDateISO(m.utc_date)
+    if (!d) return
+    ;(byDay[d] = byDay[d] || []).push(m)
+  })
+  // Um dia "fecha" quando o deadline (30min antes do 1º jogo) já passou.
+  // A partir daí, quem não pickou perde vida — mesmo antes do jogo acabar.
+  const now = Date.now()
+  const finishedDays = Object.keys(byDay).filter(d => {
+    const dl = pickDeadline(byDay[d])
+    return dl && now >= dl.getTime()
+  })
   for (const player of players) {
     const picks = await getPlayerPicks(player.id)
     for (const day of finishedDays) {
