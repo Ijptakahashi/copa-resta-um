@@ -314,25 +314,44 @@ export async function processNoPicks(players, allMatches) {
     return dl && now >= dl.getTime()
   })
   for (const player of players) {
-    const picks = await getPlayerPicks(player.id)
     for (const day of finishedDays) {
-      // Já tem QUALQUER pick nesse dia (real ou no_pick)? Então não cria nada.
-      const existing = picks.find(p => p.pick_date === day)
-      if (existing) continue
-      const dayMatches = allMatches.filter(m => toLocalDateISO(m.utc_date) === day)
-      if (!dayMatches.length) continue
-      const match = dayMatches[0]
-      const phase = STAGE_TO_PHASE[match.stage] || 'groups'
       try {
-        // Releitura de segurança imediatamente antes de inserir (evita corrida)
+        // Releitura fresca a cada dia/jogador (evita decisão com dado velho)
         const fresh = await getPlayerPicks(player.id)
-        if (fresh.some(p => p.pick_date === day)) continue
+        const existing = fresh.find(p => p.pick_date === day)
+
+        if (existing) {
+          // Já existe uma pick (real ou no_pick) nesse dia.
+          // Se for no_pick mas ainda SEM a vida aplicada, corrige agora.
+          if (existing.team_name === 'no_pick' &&
+              (existing.result === null || existing.result === undefined)) {
+            await updatePickResult(existing.id, 'no_pick', 1)
+          }
+          continue
+        }
+
+        // Não existe nenhuma pick nesse dia: cria a no_pick
+        const dayMatches = allMatches.filter(m => toLocalDateISO(m.utc_date) === day)
+        if (!dayMatches.length) continue
+        const match = dayMatches[0]
+        const phase = STAGE_TO_PHASE[match.stage] || 'groups'
+
         await submitPick({ playerId: player.id, matchId: match.id,
           teamName: 'no_pick', teamId: 0, phase, pickDate: day, isRepeat: false })
-        const allP = await getPlayerPicks(player.id)
-        const p    = allP.find(pk => pk.pick_date === day && pk.team_name === 'no_pick')
-        if (p) await updatePickResult(p.id, 'no_pick', 1)
-      } catch (_) {}
+
+        // Aplica a vida — com 1 tentativa extra caso a leitura imediata não ache a linha
+        let p = (await getPlayerPicks(player.id)).find(pk => pk.pick_date === day && pk.team_name === 'no_pick')
+        if (!p) {
+          await new Promise(r => setTimeout(r, 300))
+          p = (await getPlayerPicks(player.id)).find(pk => pk.pick_date === day && pk.team_name === 'no_pick')
+        }
+        if (p && (p.result === null || p.result === undefined)) {
+          await updatePickResult(p.id, 'no_pick', 1)
+        }
+      } catch (e) {
+        // Nunca engole em silêncio — loga pra dar pra investigar
+        console.warn(`processNoPicks falhou para player ${player.id} no dia ${day}:`, e.message)
+      }
     }
   }
 }

@@ -111,10 +111,12 @@ export default function Admin({ player }) {
                        (x.home_score!=null ? 1 : 0)
     if (score(m) > score(prev)) seen[key] = m
   })
-  const relevant = Object.values(seen).filter(m => {
-    const d = toLocalDateISO(m.utc_date)
-    return d <= today || m.status !== 'FINISHED'
-  }).sort((a,b)=>new Date(a.utc_date)-new Date(b.utc_date)).slice(0, 40)
+  // Mostra: jogos pendentes/sem resultado (qualquer data) + últimos 15 finalizados
+  // (evita que o corte de quantidade esconda os jogos de HOJE/futuros)
+  const allSorted = Object.values(seen).sort((a,b)=>new Date(a.utc_date)-new Date(b.utc_date))
+  const pendentes  = allSorted.filter(m => m.status !== 'FINISHED' || !m.winner)
+  const finalizados = allSorted.filter(m => m.status === 'FINISHED' && m.winner)
+  const relevant = [...finalizados.slice(-15), ...pendentes]
 
   return (
     <div style={{maxWidth:480,margin:'0 auto',padding:'16px 16px 90px'}}>
