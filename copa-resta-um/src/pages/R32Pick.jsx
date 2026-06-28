@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitR32Pick, removePickByDate } from '../lib/supabase'
+import { getPlayerPicks, getMatches, submitR32Pick, removePickByMatch } from '../lib/supabase'
 import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
@@ -100,10 +100,10 @@ export default function R32Pick({ player }) {
     if (existing && existing.team_name === teamName) {
       setSavingTeam(teamName)
       try {
-        // Remove pelo player_id + pick_date (fonte real no banco), nunca confia só
-        // no id local — que pode ser temporário se ainda não sincronizou com o banco.
-        await removePickByDate(player.id, pickDate)
-        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.pick_date===pickDate)))
+        // Remove pelo match_id (chave real do jogo no MM) — nunca por pick_date,
+        // que pode ser compartilhada por dois jogos do mesmo dia.
+        await removePickByMatch(player.id, matchRecord.id)
+        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.match_id===matchRecord.id)))
       } catch (e) {
         setError('Erro ao remover: ' + e.message)
       } finally { setSavingTeam(null) }
@@ -117,7 +117,7 @@ export default function R32Pick({ player }) {
     const freshSideCount = allPicks.filter(p =>
       p.phase === 'r32' && p.team_name !== 'no_pick' &&
       sideOfTeamShared(p.team_name, canonTeam) === side &&
-      p.pick_date !== pickDate   // exclui a pick deste mesmo jogo (é troca, não nova)
+      p.match_id !== matchRecord.id   // exclui a pick deste mesmo jogo (é troca, não nova)
     ).length
 
     const v = validateR32Pick(knockoutPicks, teamName, side, freshSideCount)
@@ -195,8 +195,8 @@ export default function R32Pick({ player }) {
                   if (savingTeam) return
                   setSavingTeam(pick.team_name); setError('')
                   try {
-                    await removePickByDate(player.id, pick.pick_date)
-                    setAllPicks(prev => prev.filter(p => p.pick_date !== pick.pick_date))
+                    await removePickByMatch(player.id, pick.match_id)
+                    setAllPicks(prev => prev.filter(p => p.match_id !== pick.match_id))
                   } catch (e) { setError('Erro ao remover: ' + e.message) }
                   finally { setSavingTeam(null) }
                 }}
