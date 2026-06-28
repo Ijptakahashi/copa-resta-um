@@ -178,31 +178,24 @@ export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDa
   const side = sideOfTeam(teamName, canonTeam)
   if (!side) throw new Error(`${teamName} não está no chaveamento do R32.`)
 
-  // 1. Já usada em qualquer fase do mata-mata? (R32, oitavas...) — busca direto no banco
+  // 1. Já usada em QUALQUER fase do mata-mata? (R32, oitavas...) — busca direto no banco.
   const { data: knockoutPicks, error: koErr } = await supabase
-    .from('picks').select('team_name, phase')
+    .from('picks').select('id, team_name, phase, match_id')
     .eq('player_id', playerId).neq('phase', 'groups').neq('team_name', 'no_pick')
   if (koErr) throw koErr
   const cTeam = canonTeam(teamName)
-  if ((knockoutPicks || []).some(p => canonTeam(p.team_name) === cTeam)) {
+  // Permite re-escolher o MESMO time deste mesmo jogo (troca/reafirmação);
+  // bloqueia se o time já foi usado em OUTRO jogo/fase.
+  if ((knockoutPicks || []).some(p =>
+        canonTeam(p.team_name) === cTeam && p.match_id !== matchId)) {
     throw new Error(`${teamName} já foi escolhida no mata-mata. Não pode repetir.`)
   }
 
   // 2. Conta picks JÁ SALVAS no banco para esse lado, excluindo a pick deste
-  // MESMO jogo (pick_date), que seria uma troca e não uma pick nova.
-  const sideTeams = new Set(
-    (knockoutPicks || [])
-      .filter(p => p.phase === 'r32')
-      .map(p => p.team_name)
-  )
-  // Recarrega picks de R32 com pick_date pra excluir a troca corretamente
-  const { data: r32Rows, error: r32Err } = await supabase
-    .from('picks').select('team_name, pick_date')
-    .eq('player_id', playerId).eq('phase', 'r32').neq('team_name', 'no_pick')
-  if (r32Err) throw r32Err
-
-  const sideCountNow = (r32Rows || []).filter(p =>
-    p.pick_date !== pickDate &&                       // exclui a pick deste mesmo jogo (troca)
+  // MESMO jogo (match_id) — trocar de time dentro do mesmo jogo não é pick nova.
+  const sideCountNow = (knockoutPicks || []).filter(p =>
+    p.phase === 'r32' &&
+    p.match_id !== matchId &&
     sideOfTeam(p.team_name, canonTeam) === side
   ).length
 
@@ -210,31 +203,54 @@ export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDa
     throw new Error(`Limite atingido: você já tem 2 seleções no lado ${side === 'left' ? 'esquerdo' : 'direito'}.`)
   }
 
-  // 3. Trava por jogo: nunca mais de uma pick na mesma pick_date (upsert seguro)
+  // 3. UPSERT real por (player_id, match_id): elimina o select-then-insert e
+  // a race condition junto. A chave única parcial no banco
+  // (one_pick_per_match_knockout) garante no máximo 1 pick por jogo no MM.
+  // Antes, confere se a pick deste jogo já foi processada (tem resultado).
   const { data: existing, error: readError } = await supabase
     .from('picks').select('id, result')
-    .eq('player_id', playerId).eq('pick_date', pickDate)
-  if (readError) throw readError
-
-  if (existing && existing.length > 0) {
-    const processed = existing.find(p => p.result !== null && p.result !== undefined)
-    if (processed) throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
-    const keepId = existing[0].id
-    const { error } = await supabase.from('picks')
-      .update({ match_id: matchId, team_name: teamName, phase, is_repeat: false })
-      .eq('id', keepId)
-    if (error) throw error
-    if (existing.length > 1) {
-      await supabase.from('picks').delete().in('id', existing.slice(1).map(e => e.id))
-    }
-    return
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r32')
+    .maybeSingle()
+  if (readError && readError.code !== 'PGRST116') throw readError
+  if (existing && existing.result !== null && existing.result !== undefined) {
+    throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
   }
 
-  const { error } = await supabase.from('picks').insert({
+  const row = {
     player_id: playerId, match_id: matchId, team_name: teamName,
     team_id: 0, phase, pick_date: pickDate, is_repeat: false,
-  })
+  }
+  if (existing) row.id = existing.id   // mantém o id estável ao trocar de time
+
+  const { error } = await supabase.from('picks')
+    .upsert(row, { onConflict: 'player_id,match_id', ignoreDuplicates: false })
   if (error) throw error
+}
+
+// Remove a pick de R32 de um JOGO específico (match_id) — chave correta no MM,
+// onde vários jogos podem cair no mesmo dia (pick_date não identifica a pick).
+export async function removePickByMatch(playerId, matchId) {
+  const { data, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r32')
+  if (readError) throw readError
+  if (!data || !data.length) return
+  const processed = data.find(p => p.result !== null && p.result !== undefined)
+  if (processed) {
+    throw new Error('Esta pick já foi processada e não pode mais ser removida.')
+  }
+  const ids = data.map(p => p.id)
+  const { error } = await supabase.from('picks').delete().in('id', ids)
+  if (error) throw error
+
+  // Verificação real: o delete sob RLS pode "ter sucesso" sem apagar nada.
+  const { data: stillThere, error: verifyErr } = await supabase
+    .from('picks').select('id')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r32')
+  if (verifyErr) throw verifyErr
+  if (stillThere && stillThere.length > 0) {
+    throw new Error('A remoção não foi salva no banco (possível bloqueio de permissão). Tente novamente ou avise o organizador.')
+  }
 }
 
 // Remove uma pick específica (usado pra "desmarcar" no R32 ao clicar de novo).
