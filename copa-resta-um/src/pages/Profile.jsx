@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Settings, Camera, Lock, X } from 'lucide-react'
 import { getPlayerPicks, getPlayers, getMatches, changePassword } from '../lib/supabase'
-import { computeLives, pickDeadline, toLocalDateISO } from '../lib/gameLogic'
+import { computeLives, pickDeadline, toLocalDateISO, r32Deadline, isR32Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 import Avatar from '../components/Avatar'
@@ -88,8 +88,14 @@ export default function Profile({ player, viewPlayerId }) {
     if(!usedMap[p.team_name]) usedMap[p.team_name]=[]
     if(p.result) usedMap[p.team_name].push(p.result)
   })
-  // Pick de outro jogador só é visível depois de travar (deadline do dia passou)
-  function isPickLocked(pickDate) {
+  // Pick de outro jogador só é visível depois de travar.
+  // Grupos: trava por dia (30min antes do 1º jogo daquele dia).
+  // R32: trava pela fase INTEIRA (30min antes do 1º jogo de toda a fase),
+  // independente da data específica daquela pick.
+  function isPickLocked(pickDate, phase) {
+    if (phase === 'r32') {
+      return !isR32Open(matches)   // true = mercado fechado = pode revelar
+    }
     const dayMatches = matches.filter(m => toLocalDateISO(m.utc_date) === pickDate)
     const dl = pickDeadline(dayMatches)
     if (!dl) return true            // sem jogos cadastrados nesse dia = trata como travado
@@ -282,7 +288,7 @@ export default function Profile({ player, viewPlayerId }) {
               fontFamily:'Sora',fontSize:13}}>Nenhuma pick ainda.</div>
           ):(
             [...picks].reverse().map((p,i)=>{
-              const locked = isPickLocked(p.pick_date)
+              const locked = isPickLocked(p.pick_date, p.phase)
               const hidden = !isMe && !locked   // perfil de outro + pick não travada = ocultar
               const code = hidden ? null : countryCode(p.team_name)
               return(
