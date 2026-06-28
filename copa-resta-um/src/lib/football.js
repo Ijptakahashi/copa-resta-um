@@ -1,7 +1,8 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, canonTeam } from './gameLogic'
+import { R32_BRACKET, sideOfTeam } from './r32bracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -298,10 +299,101 @@ export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awaySc
 }
 
 // ─── Sem pick = perde vida ────────────────────────────────────
+
+// ─── Penalidade por picks faltantes no R32 (2 por lado, 4 no total) ───
+// Roda depois que o mercado do R32 fecha. Quem fez menos de 2 picks em
+// algum lado perde 1 vida POR PICK QUE FALTOU (ex: fez 3 de 4 = -1 vida).
+export async function processR32Penalties(players) {
+  const allMatches = await getMatches()
+  if (isR32Open(allMatches)) return 0   // mercado ainda aberto, não penaliza
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const r32Picks = picks.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
+
+    const leftPicksList  = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'left')
+    const rightPicksList = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'right')
+    const leftCount  = leftPicksList.length
+    const rightCount = rightPicksList.length
+
+    // REGRA: lado com 3+ picks no fechamento é um estado de erro (bug antigo
+    // que permitia 3ª pick). Conta como se NENHUMA pick daquele lado fosse
+    // válida — todas as 2 esperadas faltam, gerando a penalidade completa.
+    const leftInvalid  = leftCount > 2
+    const rightInvalid = rightCount > 2
+
+    const missingLeft  = leftInvalid  ? 2 : Math.max(0, 2 - leftCount)
+    const missingRight = rightInvalid ? 2 : Math.max(0, 2 - rightCount)
+    const missingTotal = missingLeft + missingRight
+    if (missingTotal === 0) continue
+
+    // Se o lado está inválido (overflow não corrigido a tempo), neutraliza
+    // as picks reais que sobraram lá — elas NUNCA devem virar win/loss,
+    // pois o jogador não deixou uma escolha válida e definitiva.
+    if (leftInvalid) {
+      for (const p of leftPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    if (rightInvalid) {
+      for (const p of rightPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+
+    // Evita penalizar 2x: confere se já existe registro de penalidade do R32
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'r32' && p.team_name === 'no_pick').length
+    const toCreate = missingTotal - alreadyPenalized
+    if (toCreate <= 0) continue
+
+    // Cada penalidade é uma linha 'no_pick'. A chave única parcial do MM é
+    // (player_id, match_id), então cada linha precisa de um match_id de R32
+    // que o jogador AINDA NÃO ocupou. (pick_date já NÃO precisa ser única.)
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeR32Matches = allMatches
+      .filter(m => m.stage === 'ROUND_OF_32' && !usedMatchIds.has(m.id))
+
+    for (let i = 0; i < toCreate; i++) {
+      const m = freeR32Matches[i]
+      if (!m) {
+        // Não deveria acontecer (16 jogos R32 >> 4 picks), mas avisa em vez
+        // de engolir silenciosamente uma penalidade que deveria existir.
+        console.warn(`processR32Penalties: sem match_id livre para player ${player.id} (penalidade ${i+1}/${toCreate} não gravada)`)
+        break
+      }
+      try {
+        const { error } = await supabase.from('picks').insert({
+          player_id: player.id,
+          match_id: m.id,
+          team_name: 'no_pick',
+          team_id: 0,
+          phase: 'r32',
+          pick_date: toLocalDateISO(m.utc_date),
+          is_repeat: false,
+          result: 'no_pick',
+          lives_lost: 1,
+        })
+        if (!error) penalized++
+        else console.warn('processR32Penalties insert error:', error.message)
+      } catch (e) {
+        console.warn(`processR32Penalties: falhou para player ${player.id}:`, e.message)
+      }
+    }
+  }
+  return penalized
+}
+
 export async function processNoPicks(players, allMatches) {
-  // Agrupa jogos por dia
+  // Agrupa jogos por dia — APENAS dias de fase de grupos. No mata-mata não
+  // existe "pick do dia": as picks são as do bracket (R32: 4 de uma vez), e a
+  // penalidade por pick faltante é tratada em processR32Penalties. Se não
+  // filtrarmos aqui, todo jogador sem uma linha pick_date=<dia do MM> leva
+  // um -1 indevido — foi o bug que penalizou todo mundo no 1º dia do R32.
   const byDay = {}
   allMatches.forEach(m => {
+    if (m.stage !== 'GROUP_STAGE') return
     const d = toLocalDateISO(m.utc_date)
     if (!d) return
     ;(byDay[d] = byDay[d] || []).push(m)
