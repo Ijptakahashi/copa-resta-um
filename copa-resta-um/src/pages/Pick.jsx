@@ -7,6 +7,7 @@ import { computeLives, getTeamStatus, validatePick, todayBrasilia,
 import FlagImage from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 import { PickSkeleton } from '../components/Skeletons'
+import R32Pick from './R32Pick'
 
 // Canonical name for robust deduplication
 function canon(n='') {
@@ -41,7 +42,7 @@ function DeadlineCountdown({ deadline }) {
   return <span style={{fontFamily:'Sora',fontWeight:800,color:'#C4302B'}}>{t.h}:{t.m}:{t.s}</span>
 }
 
-export default function Pick({ player }) {
+function GroupsPick({ player }) {
   const navigate = useNavigate()
   const [picks, setPicks]     = useState([])
   const [allMs, setAllMs]     = useState([])
@@ -340,4 +341,35 @@ export default function Pick({ player }) {
       </div>
     </div>
   )
+}
+
+// ─── Dispatcher: decide se mostra a tela de Grupos ou a do R32 ───
+// Critério: se existir QUALQUER jogo de ROUND_OF_32 no banco e a fase de
+// grupos já não tiver jogos futuros, mostra a tela do mata-mata (R32).
+export default function Pick({ player }) {
+  const [phaseMode, setPhaseMode] = useState(null) // 'groups' | 'r32' | null=loading
+
+  useEffect(() => {
+    let alive = true
+    async function detect() {
+      const { getMatches } = await import('../lib/supabase')
+      const ms = await getMatches()
+      const today = todayBrasilia()
+
+      const hasFutureGroupGames = ms.some(m =>
+        (m.stage === 'GROUP_STAGE' || !m.stage) &&
+        toLocalDateISO(m.utc_date) >= today
+      )
+      const hasR32Games = ms.some(m => m.stage === 'ROUND_OF_32')
+
+      if (!alive) return
+      setPhaseMode(hasR32Games && !hasFutureGroupGames ? 'r32' : 'groups')
+    }
+    detect()
+    return () => { alive = false }
+  }, [])
+
+  if (phaseMode === null) return <PickSkeleton/>
+  if (phaseMode === 'r32') return <R32Pick player={player}/>
+  return <GroupsPick player={player}/>
 }
