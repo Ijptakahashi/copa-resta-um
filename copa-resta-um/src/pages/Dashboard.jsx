@@ -155,26 +155,28 @@ function R32PicksReveal({ allPlayers, allPicks, r32Open, r32Dl }) {
         )}
       </div>
 
-      <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
-        {allPlayers.map(p => {
+      <div style={{display:'flex',flexWrap:'wrap',gap:14,justifyContent:'flex-start'}}>
+        {allPlayers
+          .filter(p => computeLives(allPicks.filter(pk=>pk.player_id===p.id)).lives > 0)
+          .map(p => {
           const slots = slotsFor(p.id)
-          const eliminated = computeLives(allPicks.filter(pk=>pk.player_id===p.id)).lives <= 0
+          const eliminated = false
           return (
             <div key={p.id} style={{display:'flex',flexDirection:'column',
-              alignItems:'center',gap:5,width:56}}>
+              alignItems:'center',gap:5,width:84}}>
               <Avatar name={p.name} photoUrl={p.avatar_url} size={32}
                 ring={eliminated?'#C4302B':null} dim={eliminated}/>
-              <div style={{fontFamily:'Sora',fontWeight:600,fontSize:8,textAlign:'center',
-                color:'#6B6B6B',lineHeight:1.2,maxWidth:56,overflow:'hidden',
+              <div style={{fontFamily:'Sora',fontWeight:600,fontSize:9,textAlign:'center',
+                color:'#6B6B6B',lineHeight:1.2,width:84,overflow:'hidden',
                 textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
-              {/* 4 slots pequenos em linha: 2 esquerda + separador + 2 direita */}
-              <div style={{display:'flex',alignItems:'center',gap:3}}>
+              {/* 4 slots: 2 esquerda + separador + 2 direita, contidos na largura do card */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:2,width:84}}>
                 {slots.map((pick, i) => {
                   const code = pick && revealed ? countryCode(pick.team_name) : null
                   return (
                     <div key={i} style={{display:'flex',alignItems:'center'}}>
-                      {i === 2 && <div style={{width:1,height:14,background:'rgba(0,0,0,.1)',margin:'0 2px'}}/>}
-                      <div style={{width:18,height:18,borderRadius:'50%',overflow:'hidden',
+                      {i === 2 && <div style={{width:1,height:13,background:'rgba(0,0,0,.12)',margin:'0 2px'}}/>}
+                      <div style={{width:16,height:16,borderRadius:'50%',overflow:'hidden',
                         border:`1.5px solid ${pick?(revealed?'#C9A44A':'rgba(0,0,0,.15)'):'rgba(0,0,0,.08)'}`,
                         background:'#F8F4EE',display:'flex',alignItems:'center',justifyContent:'center',
                         flexShrink:0}}>
