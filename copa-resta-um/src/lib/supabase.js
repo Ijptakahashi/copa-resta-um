@@ -264,9 +264,24 @@ export async function removePickByDate(playerId, pickDate) {
   if (processed) {
     throw new Error('Esta pick já foi processada e não pode mais ser removida.')
   }
-  const { error } = await supabase.from('picks').delete()
-    .eq('player_id', playerId).eq('pick_date', pickDate)
+
+  // Apaga pelos IDs específicos (mais confiável que filtrar por player+data,
+  // que pode falhar silenciosamente sob certas políticas de RLS).
+  const ids = data.map(p => p.id)
+  const { error, data: deleted } = await supabase
+    .from('picks').delete().in('id', ids).select('id')
   if (error) throw error
+
+  // VERIFICAÇÃO REAL: relê o banco para confirmar que a remoção realmente
+  // aconteceu. Sem isso, um delete bloqueado por RLS pode retornar sucesso
+  // sem apagar nada, fazendo a pick "voltar" ao recarregar a página.
+  const { data: stillThere, error: verifyErr } = await supabase
+    .from('picks').select('id')
+    .eq('player_id', playerId).eq('pick_date', pickDate)
+  if (verifyErr) throw verifyErr
+  if (stillThere && stillThere.length > 0) {
+    throw new Error('A remoção não foi salva no banco (possível bloqueio de permissão). Tente novamente ou avise o organizador.')
+  }
 }
 
 export async function updatePickResult(pickId, result, livesLost) {
