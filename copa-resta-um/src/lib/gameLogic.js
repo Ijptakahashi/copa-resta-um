@@ -168,9 +168,10 @@ function canonTeam(n='') {
 export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch, currentPickDate) {
   if (!todayMatch) return { valid: false, reason: 'Sem jogo hoje.' }
 
-  // Mata-mata ainda não liberado — picks só na fase de grupos por enquanto.
-  if (currentPhase && currentPhase !== 'groups') {
-    return { valid: false, reason: 'As picks do mata-mata serão liberadas quando a fase começar.' }
+  // R32 tem fluxo próprio (validateR32Pick). As demais fases do MM ainda
+  // não foram implementadas — ficam bloqueadas até a hora certa.
+  if (currentPhase && currentPhase !== 'groups' && currentPhase !== 'r32') {
+    return { valid: false, reason: `As picks de ${PHASE_LABEL[currentPhase] || 'mata-mata'} serão liberadas quando a fase começar.` }
   }
 
   // TODAS as picks anteriores desse time (mesmo SEM resultado ainda / pendentes),
@@ -295,4 +296,37 @@ export function tiebreakStats(picks, matches) {
     goalDiff += pickedHome ? (m.home_score - m.away_score) : (m.away_score - m.home_score)
   })
   return { repeats, goalDiff }
+}
+
+// ─── R32 — Round of 32 (2 picks por lado) ──────────────────────
+// allR32Picks: picks já feitas pelo jogador nesta fase (phase === 'r32')
+// allKnockoutPicks: TODAS as picks do jogador em qualquer fase de mata-mata (para regra de não-repetição entre fases)
+export function validateR32Pick(allKnockoutPicks, teamName, side, sidePicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  // Já usada em QUALQUER fase do mata-mata (R32, oitavas, quartas...) = bloqueada pra sempre no MM
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida no mata-mata. Não pode repetir.` }
+  }
+
+  // Máximo de 2 picks por lado no R32
+  if (sidePicksCount >= 2) {
+    return { valid: false, reason: `Você já escolheu 2 seleções do lado ${side === 'left' ? 'esquerdo' : 'direito'}.` }
+  }
+
+  return { valid: true }
+}
+
+// Quantas picks de R32 já feitas em cada lado
+export function countR32PicksBySide(r32Picks, sideOfTeam) {
+  let left = 0, right = 0
+  r32Picks.forEach(p => {
+    if (p.team_name === 'no_pick') return
+    const side = sideOfTeam(p.team_name)
+    if (side === 'left') left++
+    else if (side === 'right') right++
+  })
+  return { left, right }
 }
