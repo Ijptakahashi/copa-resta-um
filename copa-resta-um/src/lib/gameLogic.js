@@ -157,7 +157,7 @@ export function buildInventory(picks) {
 
 
 // Normaliza nome de time para comparação robusta (grafias diferentes = mesmo time)
-function canonTeam(n='') {
+export function canonTeam(n='') {
   const map = {'czechia':'czech republic','korea republic':'south korea','korea rep.':'south korea',
     'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
     'usa':'united states','türkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
@@ -329,4 +329,22 @@ export function countR32PicksBySide(r32Picks, sideOfTeam) {
     else if (side === 'right') right++
   })
   return { left, right }
+}
+
+// ─── Deadline do R32 inteiro (30min antes do PRIMEIRO jogo da fase) ───
+// Diferente do deadline diário dos grupos: aqui as 4 picks (2+2) são
+// feitas de uma vez, então o mercado fecha com base no 1º jogo de TODA a fase.
+export function r32Deadline(allMatches) {
+  const r32Matches = allMatches.filter(m => m.stage === 'ROUND_OF_32')
+  if (!r32Matches.length) return null
+  const valid = r32Matches.map(m => new Date(m.utc_date)).filter(d => !isNaN(d.getTime()))
+  if (!valid.length) return null
+  const earliest = valid.reduce((min, d) => d < min ? d : min, valid[0])
+  return new Date(earliest.getTime() - 30 * 60 * 1000)
+}
+
+export function isR32Open(allMatches) {
+  const dl = r32Deadline(allMatches)
+  if (!dl) return true   // fail-safe: sem deadline calculável = mercado aberto
+  return new Date() < dl
 }
