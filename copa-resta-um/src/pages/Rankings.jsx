@@ -80,7 +80,7 @@ export default function Rankings({ player }) {
 
         {data.map((p, i) => {
           const isMe = p.id === player.id
-          const maxL = p.inKnockout ? 3 : 6
+          const maxL = 6   // teto de vidas é 6 o torneio inteiro; escudos cheios = vidas reais
           const medals = ['🥇','🥈','🥉']
           return (
             <div key={p.id}
