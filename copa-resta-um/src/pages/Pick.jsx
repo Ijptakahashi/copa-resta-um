@@ -122,7 +122,7 @@ function GroupsPick({ player }) {
   if (loading) return <PickSkeleton/>
 
   const { lives, inKnockout } = computeLives(picks)
-  const maxL = inKnockout ? 3 : 6
+  const maxL = 6   // teto de vidas é 6 o torneio inteiro
   const eliminated = lives <= 0
   const isPast = selDate < today
   const deadline = pickDeadline(dayMs)
