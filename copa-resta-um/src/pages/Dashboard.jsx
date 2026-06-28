@@ -120,6 +120,83 @@ function TodayPicksReveal({ todayMs, allPlayers, allPicks, today }) {
   )
 }
 
+
+// ─── R32: mostra todos os jogadores com 4 slots (2 esquerda + 2 direita) ───
+// Antes do fechamento: bolinhas vazias. Depois: revela as 4 seleções de cada um.
+function R32PicksReveal({ allPlayers, allPicks, r32Open, r32Dl }) {
+  if (!allPlayers.length) return null
+  const revealed = !r32Open
+
+  function slotsFor(playerId) {
+    const picks = allPicks.filter(p => p.player_id === playerId && p.phase === 'r32' && p.team_name !== 'no_pick')
+    const left  = picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left')
+    const right = picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right')
+    // Sempre 4 slots na mesma ordem: esquerda1, esquerda2, direita1, direita2
+    return [left[0], left[1], right[0], right[1]]
+  }
+
+  return (
+    <div style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
+      border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+          textTransform:'uppercase',color:'#6B6B6B'}}>PICKS DO R32</div>
+        {!revealed && r32Dl && (
+          <div style={{fontFamily:'Sora',fontSize:10,fontWeight:600,color:'#9CA3AF'}}>
+            revela às {new Date(r32Dl).toLocaleTimeString('pt-BR',
+              {hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})}
+          </div>
+        )}
+        {revealed && (
+          <span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,color:'#1A3D28',
+            background:'#EBF5EE',padding:'3px 8px',borderRadius:12,letterSpacing:'.05em'}}>
+            REVELADO
+          </span>
+        )}
+      </div>
+
+      <div style={{display:'flex',flexWrap:'wrap',gap:12}}>
+        {allPlayers.map(p => {
+          const slots = slotsFor(p.id)
+          const eliminated = computeLives(allPicks.filter(pk=>pk.player_id===p.id)).lives <= 0
+          return (
+            <div key={p.id} style={{display:'flex',flexDirection:'column',
+              alignItems:'center',gap:5,width:56}}>
+              <Avatar name={p.name} photoUrl={p.avatar_url} size={32}
+                ring={eliminated?'#C4302B':null} dim={eliminated}/>
+              <div style={{fontFamily:'Sora',fontWeight:600,fontSize:8,textAlign:'center',
+                color:'#6B6B6B',lineHeight:1.2,maxWidth:56,overflow:'hidden',
+                textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+              {/* 4 slots pequenos em linha: 2 esquerda + separador + 2 direita */}
+              <div style={{display:'flex',alignItems:'center',gap:3}}>
+                {slots.map((pick, i) => {
+                  const code = pick && revealed ? countryCode(pick.team_name) : null
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center'}}>
+                      {i === 2 && <div style={{width:1,height:14,background:'rgba(0,0,0,.1)',margin:'0 2px'}}/>}
+                      <div style={{width:18,height:18,borderRadius:'50%',overflow:'hidden',
+                        border:`1.5px solid ${pick?(revealed?'#C9A44A':'rgba(0,0,0,.15)'):'rgba(0,0,0,.08)'}`,
+                        background:'#F8F4EE',display:'flex',alignItems:'center',justifyContent:'center',
+                        flexShrink:0}}>
+                        {eliminated ? null
+                          : code ? <img src={`https://flagcdn.com/w40/${code}.png`}
+                              style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                          : pick && !revealed ? <div style={{width:7,height:7,borderRadius:'50%',background:'rgba(0,0,0,.2)'}}/>
+                          : <div style={{width:5,height:5,borderRadius:'50%',background:'rgba(0,0,0,.06)'}}/>
+                        }
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard({ player }) {
   const navigate   = useNavigate()
   const [picks, setPicks]       = useState([])
@@ -371,6 +448,16 @@ export default function Dashboard({ player }) {
           allPlayers={allPlayers}
           allPicks={allPicks}
           today={today}
+        />
+      )}
+
+      {/* R32 picks reveal — todos os jogadores, 4 slots (2+2), revela no fechamento da fase */}
+      {isR32Phase && (
+        <R32PicksReveal
+          allPlayers={allPlayers}
+          allPicks={allPicks}
+          r32Open={r32Open}
+          r32Dl={r32Dl}
         />
       )}
 
