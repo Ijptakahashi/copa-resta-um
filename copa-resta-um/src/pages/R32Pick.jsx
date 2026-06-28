@@ -2,48 +2,33 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check } from 'lucide-react'
 import { getPlayerPicks, getMatches, submitPick } from '../lib/supabase'
-import { validateR32Pick, canonTeam } from '../lib/gameLogic'
+import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
+import { Lock } from 'lucide-react'
 import { countryCode } from '../components/FlagImage'
+import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
 
 // ─── Bracket do R32 — defina aqui o lado de cada confronto ──────
 // Baseado no chaveamento oficial (bracket BBC). Ajuste conforme os
 // confrontos finais da fase de grupos forem confirmados.
-const R32_BRACKET = {
-  // Lado ESQUERDO do bracket oficial (The Athletic) — caminha para a
-  // quarter-final de Boston (jul 9) e Los Angeles (jul 10)
-  left: [
-    { home: 'Germany', away: 'Paraguay' },           // Boston, 29 jun
-    { home: 'France', away: 'Sweden' },               // New York, 30 jun
-    { home: 'South Africa', away: 'Canada' },         // Los Angeles, 28 jun
-    { home: 'Netherlands', away: 'Morocco' },         // Monterrey, 29 jun
-    { home: 'Portugal', away: 'Croatia' },            // Toronto, 2 jul
-    { home: 'Spain', away: 'Austria' },               // Los Angeles, 2 jul
-    { home: 'United States', away: 'Bosnia and Herzegovina' }, // San Francisco, 1 jul
-    { home: 'Belgium', away: 'Senegal' },             // Seattle, 1 jul
-  ],
-  // Lado DIREITO do bracket oficial — caminha para a quarter-final
-  // de Miami (jul 11) e Kansas City (jul 11)
-  right: [
-    { home: 'Brazil', away: 'Japan' },                // Houston, 29 jun
-    { home: 'Ivory Coast', away: 'Norway' },          // Dallas, 30 jun
-    { home: 'Mexico', away: 'Ecuador' },              // Mexico City, 30 jun
-    { home: 'England', away: 'DR Congo' },            // Atlanta, 1 jul
-    { home: 'Argentina', away: 'Cape Verde' },        // Miami, 3 jul
-    { home: 'Australia', away: 'Egypt' },             // Dallas, 3 jul
-    { home: 'Switzerland', away: 'Algeria' },         // Vancouver, 2 jul
-    { home: 'Colombia', away: 'Ghana' },              // Kansas City, 3 jul
-  ],
+
+function DeadlineCountdown({ deadline }) {
+  const [t, setT] = useState({ d:'--', h:'--', m:'--', s:'--' })
+  useEffect(() => {
+    function tick() {
+      const diff = deadline - Date.now()
+      if (diff <= 0) { setT({ d:'00', h:'00', m:'00', s:'00' }); return }
+      setT({
+        d: String(Math.floor(diff/86400000)).padStart(2,'0'),
+        h: String(Math.floor((diff%86400000)/3600000)).padStart(2,'0'),
+        m: String(Math.floor((diff%3600000)/60000)).padStart(2,'0'),
+        s: String(Math.floor((diff%60000)/1000)).padStart(2,'0'),
+      })
+    }
+    tick(); const id = setInterval(tick, 1000); return () => clearInterval(id)
+  }, [deadline])
+  return <span style={{fontFamily:'Sora',fontWeight:800,color:'#C4302B'}}>{t.d}d {t.h}:{t.m}:{t.s}</span>
 }
 
-function sideOfTeam(teamName) {
-  const c = canonTeam(teamName)
-  for (const side of ['left', 'right']) {
-    for (const m of R32_BRACKET[side]) {
-      if (canonTeam(m.home) === c || canonTeam(m.away) === c) return side
-    }
-  }
-  return null
-}
 
 export default function R32Pick({ player }) {
   const navigate = useNavigate()
@@ -54,6 +39,8 @@ export default function R32Pick({ player }) {
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+  const [deadline, setDeadline] = useState(null)
+  const [marketOpen, setMarketOpen] = useState(true)
 
   useEffect(() => { load() }, [player.id])
 
@@ -64,12 +51,14 @@ export default function R32Pick({ player }) {
     setMatches(ms)
     const r32 = picks.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
     setSelected(r32.map(p => p.team_name))
+    setDeadline(r32Deadline(ms))
+    setMarketOpen(isR32Open(ms))
     setLoading(false)
   }
 
   const knockoutPicks = allPicks.filter(p => p.phase && p.phase !== 'groups')
-  const leftCount  = selected.filter(t => sideOfTeam(t) === 'left').length
-  const rightCount = selected.filter(t => sideOfTeam(t) === 'right').length
+  const leftCount  = selected.filter(t => sideOfTeamShared(t, canonTeam) === 'left').length
+  const rightCount = selected.filter(t => sideOfTeamShared(t, canonTeam) === 'right').length
   const sideCount  = side === 'left' ? leftCount : rightCount
   const matchesOfSide = R32_BRACKET[side]
 
@@ -83,6 +72,7 @@ export default function R32Pick({ player }) {
 
   async function togglePick(teamName, matchRecord) {
     setError('')
+    if (!marketOpen) { setError('O mercado do R32 já fechou. Não é mais possível alterar suas picks.'); return }
     const already = selected.includes(teamName)
     if (already) {
       // Desmarcar: remove a pick do banco (volta pra null/no_pick neste fluxo simplificado)
@@ -95,10 +85,11 @@ export default function R32Pick({ player }) {
   }
 
   async function confirmSide() {
+    if (!marketOpen) { setError('O mercado do R32 já fechou.'); return }
     if (sideCount !== 2) { setError(`Escolha exatamente 2 seleções do lado ${side === 'left' ? 'esquerdo' : 'direito'}.`); return }
     setSaving(true); setError('')
     try {
-      const teamsThisSide = selected.filter(t => sideOfTeam(t) === side)
+      const teamsThisSide = selected.filter(t => sideOfTeamShared(t, canonTeam) === side)
       for (const teamName of teamsThisSide) {
         const m = matchesOfSide.find(mm => canonTeam(mm.home) === canonTeam(teamName) || canonTeam(mm.away) === canonTeam(teamName))
         const rec = m ? findMatchRecord(m.home, m.away) : null
@@ -141,6 +132,24 @@ export default function R32Pick({ player }) {
         <div style={{ fontSize:12, color:'#9A9384', marginTop:4 }}>
           Escolha 2 seleções de cada lado da chave — válidas para toda a fase
         </div>
+
+        {deadline && marketOpen && (
+          <div style={{ background:'#FEF0EF', borderRadius:10, padding:'10px 14px', margin:'12px 0',
+            display:'flex', alignItems:'center', gap:8, border:'1px solid rgba(196,48,43,.15)' }}>
+            <Lock size={13} color="#C4302B"/>
+            <span style={{ fontFamily:'Sora', fontWeight:600, fontSize:12, color:'#C4302B' }}>
+              Picks do R32 fecham em <DeadlineCountdown deadline={deadline}/>
+            </span>
+          </div>
+        )}
+        {deadline && !marketOpen && (
+          <div style={{ background:'#FEF0EF', borderRadius:10, padding:'14px', margin:'12px 0',
+            textAlign:'center', border:'1px solid rgba(196,48,43,.15)' }}>
+            <Lock size={20} color="#C4302B" style={{ marginBottom:6 }}/>
+            <div style={{ fontFamily:'Sora', fontWeight:700, color:'#C4302B', fontSize:14 }}>MERCADO FECHADO</div>
+            <div style={{ fontSize:11, color:'#9A9384', marginTop:2 }}>Suas picks do R32 estão travadas.</div>
+          </div>
+        )}
 
         {/* Progress */}
         <div style={{ display:'flex', gap:6, margin:'14px 0' }}>
