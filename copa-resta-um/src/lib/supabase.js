@@ -168,6 +168,20 @@ export async function submitPick({ playerId, matchId, teamName, teamId, phase, p
   if (error) throw error
 }
 
+// Remove uma pick específica (usado pra "desmarcar" no R32 ao clicar de novo).
+// Nunca remove pick já processada (com resultado), por segurança.
+export async function removePick(pickDate, pickId) {
+  const { data, error: readError } = await supabase
+    .from('picks').select('id, result').eq('id', pickId).maybeSingle()
+  if (readError) throw readError
+  if (!data) return
+  if (data.result !== null && data.result !== undefined) {
+    throw new Error('Esta pick já foi processada e não pode mais ser removida.')
+  }
+  const { error } = await supabase.from('picks').delete().eq('id', pickId)
+  if (error) throw error
+}
+
 export async function updatePickResult(pickId, result, livesLost) {
   const { error } = await supabase.from('picks').update({ result, lives_lost: livesLost }).eq('id', pickId)
   if (error) throw error
