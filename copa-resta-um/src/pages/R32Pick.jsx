@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitPick, removePickByDate } from '../lib/supabase'
+import { getPlayerPicks, getMatches, submitR32Pick, removePickByDate } from '../lib/supabase'
 import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
@@ -125,18 +125,17 @@ export default function R32Pick({ player }) {
 
     setSavingTeam(teamName)
     try {
-      const saved = await submitPick({
+      await submitR32Pick({
         playerId: player.id,
         matchId: matchRecord.id,
-        teamName, teamId: 0, phase: 'r32',
+        teamName, phase: 'r32',
         pickDate: matchRecord.utc_date?.slice(0,10),
-        isRepeat: false,
       })
       // Atualização OTIMISTA: atualiza a tela na hora, sem esperar reler do banco
       // (corrige o atraso de leitura que obrigava a dar refresh manual)
       setAllPicks(prev => {
         const withoutOld = existing ? prev.filter(p => p.id !== existing.id) : prev
-        const newPickId = saved?.id || existing?.id || `temp-${matchRecord.id}`
+        const newPickId = existing?.id || `temp-${matchRecord.id}`
         return [...withoutOld, {
           id: newPickId, phase: 'r32', team_name: teamName,
           pick_date: matchRecord.utc_date?.slice(0,10),
@@ -157,6 +156,74 @@ export default function R32Pick({ player }) {
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
+
+  // ─── TRAVA DE SEGURANÇA: 3+ picks num lado (resquício de bug antigo) ───
+  // Bloqueia a tela inteira e obriga o jogador a remover o excedente antes
+  // de fazer qualquer outra coisa. Mais simples e confiável do que corrigir
+  // via SQL pra cada usuário afetado individualmente.
+  const overflowSide = leftCount > 2 ? 'left' : rightCount > 2 ? 'right' : null
+  if (overflowSide) {
+    const overflowPicks = overflowSide === 'left' ? leftPicks : rightPicks
+    const excess = overflowPicks.length - 2
+    return (
+      <div style={{ maxWidth:430, margin:'0 auto', background:'#F8F4EE', minHeight:'100svh' }}>
+        <div style={{ padding:'24px 16px' }}>
+          <div style={{ background:'#FEF0EF', borderRadius:16, padding:'20px',
+            border:'1.5px solid rgba(196,48,43,.25)', textAlign:'center', marginBottom:16 }}>
+            <Lock size={28} color="#C4302B" style={{ marginBottom:10 }}/>
+            <div style={{ fontFamily:'Sora', fontWeight:800, fontSize:18, color:'#C4302B' }}>
+              CORRIJA SUAS PICKS
+            </div>
+            <div style={{ fontSize:13, color:'#6B6B5E', marginTop:8, fontFamily:'Inter', lineHeight:1.5 }}>
+              Você tem <b>{overflowPicks.length} seleções</b> no lado {overflowSide==='left'?'esquerdo':'direito'},
+              mas o máximo permitido é <b>2</b>. Remova {excess === 1 ? 'uma seleção' : `${excess} seleções`} abaixo
+              tocando nela para continuar.
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ background:'#FEF0EF', borderRadius:10, padding:'10px 14px', fontSize:12,
+              color:'#C4302B', marginBottom:12, border:'1px solid rgba(196,48,43,.2)' }}>{error}</div>
+          )}
+
+          {overflowPicks.map(pick => {
+            const code = countryCode(pick.team_name)
+            const isRemoving = savingTeam === pick.team_name
+            return (
+              <div key={pick.id}
+                onClick={async () => {
+                  if (savingTeam) return
+                  setSavingTeam(pick.team_name); setError('')
+                  try {
+                    await removePickByDate(player.id, pick.pick_date)
+                    setAllPicks(prev => prev.filter(p => p.pick_date !== pick.pick_date))
+                  } catch (e) { setError('Erro ao remover: ' + e.message) }
+                  finally { setSavingTeam(null) }
+                }}
+                style={{ background:'#fff', borderRadius:14, padding:'14px', marginBottom:10,
+                  border:'1.5px solid rgba(196,48,43,.2)', display:'flex', alignItems:'center', gap:12,
+                  cursor: savingTeam ? 'wait' : 'pointer', position:'relative' }}>
+                {isRemoving && (
+                  <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,.8)',
+                    display:'flex', alignItems:'center', justifyContent:'center', borderRadius:14 }}>
+                    <RefreshCw size={16} color="#C4302B" style={{ animation:'spin 1s linear infinite' }}/>
+                  </div>
+                )}
+                {code && <img src={`https://flagcdn.com/w40/${code}.png`} width={32} height={22}
+                  style={{ borderRadius:4, flexShrink:0 }} alt=""/>}
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:'Sora', fontWeight:700, fontSize:14 }}>{pick.team_name}</div>
+                  <div style={{ fontSize:11, color:'#9CA3AF', marginTop:1 }}>{pick.pick_date}</div>
+                </div>
+                <span style={{ fontFamily:'Sora', fontSize:10, fontWeight:700, color:'#C4302B',
+                  background:'#FEF0EF', padding:'5px 10px', borderRadius:10 }}>TOCAR P/ REMOVER</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ maxWidth:430, margin:'0 auto', background:'#F8F4EE', minHeight:'100svh' }}>
