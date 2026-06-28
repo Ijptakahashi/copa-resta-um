@@ -312,13 +312,35 @@ export async function processR32Penalties(players) {
     const picks = await getPlayerPicks(player.id)
     const r32Picks = picks.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
 
-    const leftCount  = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'left').length
-    const rightCount = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'right').length
+    const leftPicksList  = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'left')
+    const rightPicksList = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'right')
+    const leftCount  = leftPicksList.length
+    const rightCount = rightPicksList.length
 
-    const missingLeft  = Math.max(0, 2 - leftCount)
-    const missingRight = Math.max(0, 2 - rightCount)
+    // REGRA: lado com 3+ picks no fechamento é um estado de erro (bug antigo
+    // que permitia 3ª pick). Conta como se NENHUMA pick daquele lado fosse
+    // válida — todas as 2 esperadas faltam, gerando a penalidade completa.
+    const leftInvalid  = leftCount > 2
+    const rightInvalid = rightCount > 2
+
+    const missingLeft  = leftInvalid  ? 2 : Math.max(0, 2 - leftCount)
+    const missingRight = rightInvalid ? 2 : Math.max(0, 2 - rightCount)
     const missingTotal = missingLeft + missingRight
     if (missingTotal === 0) continue
+
+    // Se o lado está inválido (overflow não corrigido a tempo), neutraliza
+    // as picks reais que sobraram lá — elas NUNCA devem virar win/loss,
+    // pois o jogador não deixou uma escolha válida e definitiva.
+    if (leftInvalid) {
+      for (const p of leftPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    if (rightInvalid) {
+      for (const p of rightPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
 
     // Evita penalizar 2x: confere se já existe registro de penalidade do R32
     const alreadyPenalized = picks.filter(p =>
