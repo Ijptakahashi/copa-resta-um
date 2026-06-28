@@ -203,10 +203,12 @@ export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDa
     throw new Error(`Limite atingido: você já tem 2 seleções no lado ${side === 'left' ? 'esquerdo' : 'direito'}.`)
   }
 
-  // 3. UPSERT real por (player_id, match_id): elimina o select-then-insert e
-  // a race condition junto. A chave única parcial no banco
-  // (one_pick_per_match_knockout) garante no máximo 1 pick por jogo no MM.
-  // Antes, confere se a pick deste jogo já foi processada (tem resultado).
+  // 3. Update se já existe pick para este jogo, senão insert. NÃO usamos
+  // .upsert()/ON CONFLICT aqui porque o índice único do MM é PARCIAL
+  // (where phase <> 'groups'), e o Postgres não aceita índice parcial como
+  // alvo de ON CONFLICT sem repetir a cláusula WHERE — coisa que o cliente
+  // Supabase não permite. O índice parcial continua sendo a trava real
+  // contra duplicata no banco; aqui só decidimos update vs insert.
   const { data: existing, error: readError } = await supabase
     .from('picks').select('id, result')
     .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r32')
@@ -216,14 +218,19 @@ export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDa
     throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
   }
 
-  const row = {
+  if (existing) {
+    const { error } = await supabase.from('picks')
+      .update({ team_name: teamName, team_id: 0, phase, pick_date: pickDate, is_repeat: false })
+      .eq('id', existing.id)
+      .is('result', null)   // nunca sobrescreve uma pick já processada
+    if (error) throw error
+    return
+  }
+
+  const { error } = await supabase.from('picks').insert({
     player_id: playerId, match_id: matchId, team_name: teamName,
     team_id: 0, phase, pick_date: pickDate, is_repeat: false,
-  }
-  if (existing) row.id = existing.id   // mantém o id estável ao trocar de time
-
-  const { error } = await supabase.from('picks')
-    .upsert(row, { onConflict: 'player_id,match_id', ignoreDuplicates: false })
+  })
   if (error) throw error
 }
 
