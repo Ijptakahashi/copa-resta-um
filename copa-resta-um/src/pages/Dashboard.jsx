@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { getPlayerPicks, getMatches, getAllPicks, getPlayers } from '../lib/supabase'
 import { computeLives, todayBrasilia, toLocalDateISO, isPickOpen,
-         pickDeadline } from '../lib/gameLogic'
+         pickDeadline, r32Deadline, isR32Open, canonTeam } from '../lib/gameLogic'
+import { sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
 import { ShieldIcon } from '../components/ShieldLives'
 import { countryCode } from '../components/FlagImage'
 import Avatar from '../components/Avatar'
@@ -119,6 +120,85 @@ function TodayPicksReveal({ todayMs, allPlayers, allPicks, today }) {
   )
 }
 
+
+// ─── R32: mostra todos os jogadores com 4 slots (2 esquerda + 2 direita) ───
+// Antes do fechamento: bolinhas vazias. Depois: revela as 4 seleções de cada um.
+function R32PicksReveal({ allPlayers, allPicks, r32Open, r32Dl }) {
+  if (!allPlayers.length) return null
+  const revealed = !r32Open
+
+  function slotsFor(playerId) {
+    const picks = allPicks.filter(p => p.player_id === playerId && p.phase === 'r32' && p.team_name !== 'no_pick')
+    const left  = picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left')
+    const right = picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right')
+    // Sempre 4 slots na mesma ordem: esquerda1, esquerda2, direita1, direita2
+    return [left[0], left[1], right[0], right[1]]
+  }
+
+  return (
+    <div style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
+      border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+        <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+          textTransform:'uppercase',color:'#6B6B6B'}}>PICKS DO R32</div>
+        {!revealed && r32Dl && (
+          <div style={{fontFamily:'Sora',fontSize:10,fontWeight:600,color:'#9CA3AF'}}>
+            revela às {new Date(r32Dl).toLocaleTimeString('pt-BR',
+              {hour:'2-digit',minute:'2-digit',timeZone:'America/Sao_Paulo'})}
+          </div>
+        )}
+        {revealed && (
+          <span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,color:'#1A3D28',
+            background:'#EBF5EE',padding:'3px 8px',borderRadius:12,letterSpacing:'.05em'}}>
+            REVELADO
+          </span>
+        )}
+      </div>
+
+      <div style={{display:'flex',flexWrap:'wrap',gap:14,justifyContent:'flex-start'}}>
+        {allPlayers
+          .filter(p => computeLives(allPicks.filter(pk=>pk.player_id===p.id)).lives > 0)
+          .map(p => {
+          const slots = slotsFor(p.id)
+          const eliminated = false
+          return (
+            <div key={p.id} style={{display:'flex',flexDirection:'column',
+              alignItems:'center',gap:5,width:84}}>
+              <Avatar name={p.name} photoUrl={p.avatar_url} size={32}
+                ring={eliminated?'#C4302B':null} dim={eliminated}/>
+              <div style={{fontFamily:'Sora',fontWeight:600,fontSize:9,textAlign:'center',
+                color:'#6B6B6B',lineHeight:1.2,width:84,overflow:'hidden',
+                textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.name}</div>
+              {/* 4 slots: 2 esquerda + separador + 2 direita, contidos na largura do card */}
+              <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:2,width:84}}>
+                {slots.map((pick, i) => {
+                  const code = pick && revealed ? countryCode(pick.team_name) : null
+                  return (
+                    <div key={i} style={{display:'flex',alignItems:'center'}}>
+                      {i === 2 && <div style={{width:1,height:13,background:'rgba(0,0,0,.12)',margin:'0 2px'}}/>}
+                      <div style={{width:16,height:16,borderRadius:'50%',overflow:'hidden',
+                        border:`1.5px solid ${pick?(revealed?'#C9A44A':'rgba(0,0,0,.15)'):'rgba(0,0,0,.08)'}`,
+                        background:'#F8F4EE',display:'flex',alignItems:'center',justifyContent:'center',
+                        flexShrink:0}}>
+                        {eliminated ? null
+                          : code ? <img src={`https://flagcdn.com/w40/${code}.png`}
+                              style={{width:'100%',height:'100%',objectFit:'cover'}} alt=""/>
+                          : pick && !revealed ? <div style={{width:7,height:7,borderRadius:'50%',background:'rgba(0,0,0,.2)'}}/>
+                          : <div style={{width:5,height:5,borderRadius:'50%',background:'rgba(0,0,0,.06)'}}/>
+                        }
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard({ player }) {
   const navigate   = useNavigate()
   const [picks, setPicks]       = useState([])
@@ -130,6 +210,10 @@ export default function Dashboard({ player }) {
   const [allPicks, setAllPicks] = useState([])
   const [loading, setLoading]   = useState(true)
   const [syncing, setSyncing]   = useState(false)
+  const [isR32Phase, setIsR32]  = useState(false)
+  const [r32Counts, setR32Counts] = useState({ left:0, right:0 })
+  const [r32Dl, setR32Dl]       = useState(null)
+  const [r32Open, setR32OpenSt] = useState(true)
   const today = todayBrasilia()
 
   useEffect(() => { load() }, [player.id])
@@ -162,6 +246,22 @@ export default function Dashboard({ player }) {
       return {...p, lives, correct, eliminated:lives<=0}
     }).sort((a,b) => b.lives-a.lives||b.correct-a.correct)
     setLeaders(ranked.slice(0,5))
+
+    // Detecta fase R32 e calcula progresso de picks por lado
+    const hasFutureGroupGames = allMs.some(m =>
+      (m.stage === 'GROUP_STAGE' || !m.stage) && toLocalDateISO(m.utc_date) >= today)
+    const hasR32Games = allMs.some(m => m.stage === 'ROUND_OF_32')
+    const r32Active = hasR32Games && !hasFutureGroupGames
+    setIsR32(r32Active)
+    if (r32Active) {
+      const r32Picks = pp.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
+      const left  = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left').length
+      const right = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right').length
+      setR32Counts({ left, right })
+      setR32Dl(r32Deadline(allMs))
+      setR32OpenSt(isR32Open(allMs))
+    }
+
     setLoading(false)
   }
 
@@ -223,7 +323,38 @@ export default function Dashboard({ player }) {
         </div>
       </div>
 
-      {/* Today's Pick */}
+      {/* R32: indicador de progresso 2/2 por lado, OU Today's Pick (fase de grupos) */}
+      {isR32Phase ? (
+        <div className="fade-up fade-up-2" onClick={()=>navigate('/pick')}
+          style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,cursor:'pointer',
+          border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+            <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+              textTransform:'uppercase',color:'#6B6B6B'}}>SUAS PICKS — R32</div>
+            {!r32Open && <span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,color:'#1A3D28',
+              background:'#EBF5EE',padding:'3px 8px',borderRadius:12}}>FECHADO</span>}
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            {[['ESQUERDO', r32Counts.left],['DIREITO', r32Counts.right]].map(([label,cnt])=>(
+              <div key={label} style={{flex:1,background: cnt===2?'rgba(201,164,74,.08)':'#F8F4EE',
+                borderRadius:12,padding:'12px',textAlign:'center',
+                border:`1.5px solid ${cnt===2?'rgba(201,164,74,.35)':'rgba(0,0,0,.06)'}`}}>
+                <div style={{fontFamily:'Sora',fontWeight:700,fontSize:9,letterSpacing:'.08em',
+                  color:'#9A9384',marginBottom:4}}>{label}</div>
+                <div style={{fontFamily:'Sora',fontWeight:800,fontSize:22,
+                  color:cnt===2?'#A07830':'#1A3D28'}}>{cnt}/2</div>
+                {cnt===2 && <div style={{fontFamily:'Sora',fontSize:8,fontWeight:700,color:'#A07830',
+                  marginTop:2,letterSpacing:'.04em'}}>✓ CONFIRMADO</div>}
+              </div>
+            ))}
+          </div>
+          {r32Open && r32Dl && (
+            <div style={{textAlign:'center',fontSize:11,color:'#9CA3AF',marginTop:10,fontFamily:'Inter'}}>
+              Toque para escolher suas seleções
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="fade-up fade-up-2" style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,
         border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
@@ -310,14 +441,27 @@ export default function Dashboard({ player }) {
           </div>
         )}
       </div>
+      )}
 
-      {/* Today's picks reveal */}
-      <TodayPicksReveal
-        todayMs={todayMs}
-        allPlayers={allPlayers}
-        allPicks={allPicks}
-        today={today}
-      />
+      {/* Today's picks reveal — só faz sentido na fase de grupos */}
+      {!isR32Phase && (
+        <TodayPicksReveal
+          todayMs={todayMs}
+          allPlayers={allPlayers}
+          allPicks={allPicks}
+          today={today}
+        />
+      )}
+
+      {/* R32 picks reveal — todos os jogadores, 4 slots (2+2), revela no fechamento da fase */}
+      {isR32Phase && (
+        <R32PicksReveal
+          allPlayers={allPlayers}
+          allPicks={allPicks}
+          r32Open={r32Open}
+          r32Dl={r32Dl}
+        />
+      )}
 
       {/* Next match countdown — CENTERED */}
       {nextMatch && (

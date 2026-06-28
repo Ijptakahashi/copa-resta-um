@@ -8,6 +8,7 @@ import Rankings from './pages/Rankings'
 import Profile from './pages/Profile'
 import Chat from './pages/Chat'
 import Admin from './pages/Admin'
+import R32Pick from './pages/R32Pick'
 import Navbar from './components/Navbar'
 import InstallButton from './components/InstallButton'
 import './index.css'
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="/profile/:id" element={<ProfileById player={player}/>}/>
           <Route path="/chat"        element={<Chat player={player}/>}/>
           <Route path="/admin"       element={<Admin player={player}/>}/>
+          <Route path="/r32"         element={<R32Pick player={player}/>}/>
           <Route path="*"            element={<Navigate to="/dashboard" replace/>}/>
         </Routes>
       </main>

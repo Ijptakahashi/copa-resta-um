@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
 import { getMatches, getPlayers } from '../lib/supabase'
-import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks } from '../lib/football'
+import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks, processR32Penalties } from '../lib/football'
 import { toLocalDateISO } from '../lib/gameLogic'
 
 // Normaliza nomes p/ deduplicar jogos iguais com grafias diferentes
@@ -62,7 +62,8 @@ export default function Admin({ player }) {
       const players = await getPlayers()
       const n = await processPicks(players)
       await processNoPicks(players, await getMatches())
-      setMsg(`✓ ${n} pick(s) processada(s)!`)
+      const r32n = await processR32Penalties(players)
+      setMsg(`✓ ${n} pick(s) processada(s)!` + (r32n ? ` ${r32n} penalidade(s) de R32 aplicada(s).` : ''))
       await load()
     } catch(e) { setMsg('Erro: ' + e.message) }
     finally { setBusy(false) }
@@ -84,6 +85,7 @@ export default function Admin({ player }) {
       await syncResults(players)
       const ms = await getMatches()
       await processNoPicks(players, ms)
+      await processR32Penalties(players)
       await load()
       setMsg('✓ Sincronização completa!')
     } catch(e) { setMsg('Erro: ' + e.message) }
@@ -200,3 +202,4 @@ export default function Admin({ player }) {
     </div>
   )
 }
+

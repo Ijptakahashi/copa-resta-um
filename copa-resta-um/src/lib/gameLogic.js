@@ -157,7 +157,7 @@ export function buildInventory(picks) {
 
 
 // Normaliza nome de time para comparação robusta (grafias diferentes = mesmo time)
-function canonTeam(n='') {
+export function canonTeam(n='') {
   const map = {'czechia':'czech republic','korea republic':'south korea','korea rep.':'south korea',
     'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
     'usa':'united states','türkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
@@ -168,9 +168,10 @@ function canonTeam(n='') {
 export function validatePick(playerPicks, teamId, teamName, currentPhase, todayMatch, currentPickDate) {
   if (!todayMatch) return { valid: false, reason: 'Sem jogo hoje.' }
 
-  // Mata-mata ainda não liberado — picks só na fase de grupos por enquanto.
-  if (currentPhase && currentPhase !== 'groups') {
-    return { valid: false, reason: 'As picks do mata-mata serão liberadas quando a fase começar.' }
+  // R32 tem fluxo próprio (validateR32Pick). As demais fases do MM ainda
+  // não foram implementadas — ficam bloqueadas até a hora certa.
+  if (currentPhase && currentPhase !== 'groups' && currentPhase !== 'r32') {
+    return { valid: false, reason: `As picks de ${PHASE_LABEL[currentPhase] || 'mata-mata'} serão liberadas quando a fase começar.` }
   }
 
   // TODAS as picks anteriores desse time (mesmo SEM resultado ainda / pendentes),
@@ -295,4 +296,55 @@ export function tiebreakStats(picks, matches) {
     goalDiff += pickedHome ? (m.home_score - m.away_score) : (m.away_score - m.home_score)
   })
   return { repeats, goalDiff }
+}
+
+// ─── R32 — Round of 32 (2 picks por lado) ──────────────────────
+// allR32Picks: picks já feitas pelo jogador nesta fase (phase === 'r32')
+// allKnockoutPicks: TODAS as picks do jogador em qualquer fase de mata-mata (para regra de não-repetição entre fases)
+export function validateR32Pick(allKnockoutPicks, teamName, side, sidePicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  // Já usada em QUALQUER fase do mata-mata (R32, oitavas, quartas...) = bloqueada pra sempre no MM
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida no mata-mata. Não pode repetir.` }
+  }
+
+  // Máximo de 2 picks por lado no R32
+  if (sidePicksCount >= 2) {
+    return { valid: false, reason: `Você já escolheu 2 seleções do lado ${side === 'left' ? 'esquerdo' : 'direito'}.` }
+  }
+
+  return { valid: true }
+}
+
+// Quantas picks de R32 já feitas em cada lado
+export function countR32PicksBySide(r32Picks, sideOfTeam) {
+  let left = 0, right = 0
+  r32Picks.forEach(p => {
+    if (p.team_name === 'no_pick') return
+    const side = sideOfTeam(p.team_name)
+    if (side === 'left') left++
+    else if (side === 'right') right++
+  })
+  return { left, right }
+}
+
+// ─── Deadline do R32 inteiro (30min antes do PRIMEIRO jogo da fase) ───
+// Diferente do deadline diário dos grupos: aqui as 4 picks (2+2) são
+// feitas de uma vez, então o mercado fecha com base no 1º jogo de TODA a fase.
+export function r32Deadline(allMatches) {
+  const r32Matches = allMatches.filter(m => m.stage === 'ROUND_OF_32')
+  if (!r32Matches.length) return null
+  const valid = r32Matches.map(m => new Date(m.utc_date)).filter(d => !isNaN(d.getTime()))
+  if (!valid.length) return null
+  const earliest = valid.reduce((min, d) => d < min ? d : min, valid[0])
+  return new Date(earliest.getTime() - 30 * 60 * 1000)
+}
+
+export function isR32Open(allMatches) {
+  const dl = r32Deadline(allMatches)
+  if (!dl) return true   // fail-safe: sem deadline calculável = mercado aberto
+  return new Date() < dl
 }
