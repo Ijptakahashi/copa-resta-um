@@ -182,6 +182,24 @@ export async function removePick(pickDate, pickId) {
   if (error) throw error
 }
 
+// Remove pela combinação player_id + pick_date (chave real e confiável),
+// em vez de um id local que pode estar desatualizado (ex: id temporário
+// de uma atualização otimista que ainda não sincronizou com o banco).
+export async function removePickByDate(playerId, pickDate) {
+  const { data, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('pick_date', pickDate)
+  if (readError) throw readError
+  if (!data || !data.length) return
+  const processed = data.find(p => p.result !== null && p.result !== undefined)
+  if (processed) {
+    throw new Error('Esta pick já foi processada e não pode mais ser removida.')
+  }
+  const { error } = await supabase.from('picks').delete()
+    .eq('player_id', playerId).eq('pick_date', pickDate)
+  if (error) throw error
+}
+
 export async function updatePickResult(pickId, result, livesLost) {
   const { error } = await supabase.from('picks').update({ result, lives_lost: livesLost }).eq('id', pickId)
   if (error) throw error
