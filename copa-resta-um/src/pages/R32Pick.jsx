@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitPick } from '../lib/supabase'
+import { getPlayerPicks, getMatches, submitPick, removePick } from '../lib/supabase'
 import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
@@ -91,10 +91,23 @@ export default function R32Pick({ player }) {
   async function selectTeam(teamName, matchRecord, otherTeamName) {
     setError('')
     if (!marketOpen) { setError('O mercado do R32 já fechou. Suas picks estão travadas.'); return }
-    if (isBurnedFromGroups(teamName)) { setError(`${teamName} está queimada — perdeu na fase de grupos.`); return }
 
     const existing = pickForMatch(teamName, otherTeamName)
-    if (existing && existing.team_name === teamName) return  // já é essa, nada a fazer
+
+    // Clicar de novo na MESMA seleção já feita = desmarcar (remove a pick desse jogo)
+    if (existing && existing.team_name === teamName) {
+      setSavingTeam(teamName)
+      try {
+        await removePick(matchRecord.utc_date?.slice(0,10), existing.id)
+        // Atualização otimista: tira do state local na hora, sem esperar releitura do banco
+        setAllPicks(prev => prev.filter(p => p.id !== existing.id))
+      } catch (e) {
+        setError('Erro ao remover: ' + e.message)
+      } finally { setSavingTeam(null) }
+      return
+    }
+
+    if (isBurnedFromGroups(teamName)) { setError(`${teamName} está queimada — perdeu na fase de grupos.`); return }
 
     // Trocar a pick desse jogo específico não conta como pick nova pro limite de 2,
     // pois está substituindo a seleção já feita NESSE confronto.
@@ -106,14 +119,26 @@ export default function R32Pick({ player }) {
 
     setSavingTeam(teamName)
     try {
-      await submitPick({
+      const saved = await submitPick({
         playerId: player.id,
         matchId: matchRecord.id,
         teamName, teamId: 0, phase: 'r32',
         pickDate: matchRecord.utc_date?.slice(0,10),
         isRepeat: false,
       })
-      await load()
+      // Atualização OTIMISTA: atualiza a tela na hora, sem esperar reler do banco
+      // (corrige o atraso de leitura que obrigava a dar refresh manual)
+      setAllPicks(prev => {
+        const withoutOld = existing ? prev.filter(p => p.id !== existing.id) : prev
+        const newPickId = saved?.id || existing?.id || `temp-${matchRecord.id}`
+        return [...withoutOld, {
+          id: newPickId, phase: 'r32', team_name: teamName,
+          pick_date: matchRecord.utc_date?.slice(0,10),
+          match_id: matchRecord.id, result: null, is_repeat: false,
+        }]
+      })
+      // Releitura em segundo plano pra garantir consistência com o banco (sem bloquear a UI)
+      load()
     } catch (e) {
       setError('Erro ao salvar: ' + e.message)
     } finally { setSavingTeam(null) }
@@ -239,7 +264,13 @@ export default function R32Pick({ player }) {
                 fontFamily:'Sora', fontSize:9, fontWeight:700, letterSpacing:'.08em',
                 color:'#B0A898', textTransform:'uppercase' }}>
                 <span>{pending ? 'PENDENTE' : (rec.utc_date?.slice(0,10) || '')}</span>
-                {currentPick && (
+                {currentPick && marketOpen && (
+                  <span style={{ color:'#1A3D28', display:'flex', alignItems:'center', gap:3 }}
+                    title="Toque na seleção escolhida para remover">
+                    <Check size={10}/> ESCOLHIDO · TOQUE P/ REMOVER
+                  </span>
+                )}
+                {currentPick && !marketOpen && (
                   <span style={{ color:'#1A3D28', display:'flex', alignItems:'center', gap:3 }}>
                     <Check size={10}/> ESCOLHIDO
                   </span>
@@ -275,7 +306,8 @@ export default function R32Pick({ player }) {
                       <span style={{ fontFamily:'Sora', fontWeight:600, fontSize:12, color:'#1A1A1A',
                         textDecoration: burned ? 'line-through' : 'none' }}>{teamName}</span>
                       {isSel && (
-                        <div style={{ width:16, height:16, borderRadius:'50%', background:'#1A3D28',
+                        <div title="Toque para remover esta escolha"
+                          style={{ width:16, height:16, borderRadius:'50%', background:'#1A3D28',
                           display:'flex', alignItems:'center', justifyContent:'center', marginLeft:'auto', flexShrink:0 }}>
                           <Check size={10} color="#fff"/>
                         </div>
