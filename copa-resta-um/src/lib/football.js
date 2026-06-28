@@ -348,27 +348,29 @@ export async function processR32Penalties(players) {
     const toCreate = missingTotal - alreadyPenalized
     if (toCreate <= 0) continue
 
-    // Cada penalidade precisa de uma pick_date ÚNICA (trava one_pick_per_day).
-    // Usa as datas dos jogos de R32 que o jogador AINDA NÃO ocupou.
-    const usedDates = new Set(picks.filter(p => p.pick_date).map(p => p.pick_date))
-    const r32Dates = [...new Set(
-      allMatches.filter(m => m.stage === 'ROUND_OF_32').map(m => toLocalDateISO(m.utc_date))
-    )].filter(d => !usedDates.has(d))
-
-    const anyR32Match = allMatches.find(m => m.stage === 'ROUND_OF_32')
-    if (!anyR32Match) continue
+    // Cada penalidade é uma linha 'no_pick'. A chave única parcial do MM é
+    // (player_id, match_id), então cada linha precisa de um match_id de R32
+    // que o jogador AINDA NÃO ocupou. (pick_date já NÃO precisa ser única.)
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeR32Matches = allMatches
+      .filter(m => m.stage === 'ROUND_OF_32' && !usedMatchIds.has(m.id))
 
     for (let i = 0; i < toCreate; i++) {
-      const pickDate = r32Dates[i] || null
-      if (!pickDate) break   // sem data livre — evita violar a constraint
+      const m = freeR32Matches[i]
+      if (!m) {
+        // Não deveria acontecer (16 jogos R32 >> 4 picks), mas avisa em vez
+        // de engolir silenciosamente uma penalidade que deveria existir.
+        console.warn(`processR32Penalties: sem match_id livre para player ${player.id} (penalidade ${i+1}/${toCreate} não gravada)`)
+        break
+      }
       try {
         const { error } = await supabase.from('picks').insert({
           player_id: player.id,
-          match_id: anyR32Match.id,
+          match_id: m.id,
           team_name: 'no_pick',
           team_id: 0,
           phase: 'r32',
-          pick_date: pickDate,
+          pick_date: toLocalDateISO(m.utc_date),
           is_repeat: false,
           result: 'no_pick',
           lives_lost: 1,
