@@ -123,6 +123,55 @@ function TodayPicksReveal({ todayMs, allPlayers, allPicks, today }) {
 
 // ─── R32: mostra todos os jogadores com 4 slots (2 esquerda + 2 direita) ───
 // Antes do fechamento: bolinhas vazias. Depois: revela as 4 seleções de cada um.
+function R32Casualties({ allPlayers, allPicks }) {
+  // Jogadores que perderam vida no R32 porque a seleção escolhida foi eliminada.
+  const fallen = allPlayers.map(pl => {
+    const losses = allPicks.filter(p =>
+      p.player_id === pl.id && p.phase === 'r32' &&
+      p.team_name !== 'no_pick' && p.result === 'loss')
+    return losses.length ? { player: pl, teams: losses.map(l => l.team_name) } : null
+  }).filter(Boolean)
+
+  if (!fallen.length) return null
+
+  return (
+    <div style={{background:'#FEF0EF',borderRadius:16,padding:'14px 16px',marginBottom:12,
+      border:'1px solid rgba(196,48,43,.25)',boxShadow:'0 2px 12px rgba(196,48,43,.08)'}}>
+      <div style={{fontFamily:'Sora',fontWeight:700,fontSize:10,letterSpacing:'.1em',
+        textTransform:'uppercase',color:'#C4302B',marginBottom:10,
+        display:'flex',alignItems:'center',gap:6}}>
+        <span style={{fontSize:13}}>💀</span> Baixas do R32
+      </div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {fallen.map(({player, teams}) => (
+          <div key={player.id} style={{display:'flex',alignItems:'center',gap:10}}>
+            <Avatar name={player.name} photoUrl={player.avatar_url} size={28} ring="#C4302B"/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontFamily:'Sora',fontWeight:700,fontSize:13,color:'#1A1A1A',
+                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                {player.name}
+              </div>
+              <div style={{fontFamily:'Inter',fontSize:11,color:'#9B3A35'}}>
+                caiu com {teams.join(', ')} · −{teams.length} vida{teams.length>1?'s':''}
+              </div>
+            </div>
+            <div style={{display:'flex',gap:4}}>
+              {teams.map((t,i) => {
+                const code = countryCode(t)
+                return code ? (
+                  <img key={i} src={`https://flagcdn.com/w40/${code}.png`} alt={t}
+                    style={{width:22,height:16,borderRadius:2,objectFit:'cover',
+                      border:'1px solid rgba(0,0,0,.1)',opacity:.6}}/>
+                ) : null
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function R32PicksReveal({ allPlayers, allPicks, r32Open, r32Dl }) {
   if (!allPlayers.length) return null
   const revealed = !r32Open
@@ -451,6 +500,11 @@ export default function Dashboard({ player }) {
           allPicks={allPicks}
           today={today}
         />
+      )}
+
+      {/* Quem perdeu vida no R32 (ex.: pickou time que caiu) — destaque */}
+      {isR32Phase && (
+        <R32Casualties allPlayers={allPlayers} allPicks={allPicks} />
       )}
 
       {/* R32 picks reveal — todos os jogadores, 4 slots (2+2), revela no fechamento da fase */}
