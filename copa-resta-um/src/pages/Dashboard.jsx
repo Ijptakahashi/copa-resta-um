@@ -326,7 +326,7 @@ export default function Dashboard({ player }) {
   if (loading) return <DashboardSkeleton/>
 
   const {lives, inKnockout} = computeLives(picks)
-  const maxL = inKnockout ? 3 : 6
+  const maxL = 6   // teto de vidas é 6 o torneio inteiro
   const myRank = leaders.findIndex(l => l.id===player.id)+1
   const pickOpen = isPickOpen(todayMs)
 
@@ -552,7 +552,7 @@ export default function Dashboard({ player }) {
           </div>
           {leaders.map((l,i)=>{
             const isMe = l.id===player.id
-            const maxLl = l.inKnockout?3:6
+            const maxLl = 6
             return(
               <div key={l.id} style={{display:'flex',alignItems:'center',gap:10,
                 padding:'9px 0',
