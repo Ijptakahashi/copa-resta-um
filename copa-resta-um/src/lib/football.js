@@ -1,7 +1,8 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, canonTeam } from './gameLogic'
+import { R32_BRACKET, sideOfTeam } from './r32bracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -298,6 +299,68 @@ export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awaySc
 }
 
 // ─── Sem pick = perde vida ────────────────────────────────────
+
+// ─── Penalidade por picks faltantes no R32 (2 por lado, 4 no total) ───
+// Roda depois que o mercado do R32 fecha. Quem fez menos de 2 picks em
+// algum lado perde 1 vida POR PICK QUE FALTOU (ex: fez 3 de 4 = -1 vida).
+export async function processR32Penalties(players) {
+  const allMatches = await getMatches()
+  if (isR32Open(allMatches)) return 0   // mercado ainda aberto, não penaliza
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const r32Picks = picks.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
+
+    const leftCount  = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'left').length
+    const rightCount = r32Picks.filter(p => sideOfTeam(p.team_name, canonTeam) === 'right').length
+
+    const missingLeft  = Math.max(0, 2 - leftCount)
+    const missingRight = Math.max(0, 2 - rightCount)
+    const missingTotal = missingLeft + missingRight
+    if (missingTotal === 0) continue
+
+    // Evita penalizar 2x: confere se já existe registro de penalidade do R32
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'r32' && p.team_name === 'no_pick').length
+    const toCreate = missingTotal - alreadyPenalized
+    if (toCreate <= 0) continue
+
+    // Cada penalidade precisa de uma pick_date ÚNICA (trava one_pick_per_day).
+    // Usa as datas dos jogos de R32 que o jogador AINDA NÃO ocupou.
+    const usedDates = new Set(picks.filter(p => p.pick_date).map(p => p.pick_date))
+    const r32Dates = [...new Set(
+      allMatches.filter(m => m.stage === 'ROUND_OF_32').map(m => toLocalDateISO(m.utc_date))
+    )].filter(d => !usedDates.has(d))
+
+    const anyR32Match = allMatches.find(m => m.stage === 'ROUND_OF_32')
+    if (!anyR32Match) continue
+
+    for (let i = 0; i < toCreate; i++) {
+      const pickDate = r32Dates[i] || null
+      if (!pickDate) break   // sem data livre — evita violar a constraint
+      try {
+        const { error } = await supabase.from('picks').insert({
+          player_id: player.id,
+          match_id: anyR32Match.id,
+          team_name: 'no_pick',
+          team_id: 0,
+          phase: 'r32',
+          pick_date: pickDate,
+          is_repeat: false,
+          result: 'no_pick',
+          lives_lost: 1,
+        })
+        if (!error) penalized++
+        else console.warn('processR32Penalties insert error:', error.message)
+      } catch (e) {
+        console.warn(`processR32Penalties: falhou para player ${player.id}:`, e.message)
+      }
+    }
+  }
+  return penalized
+}
+
 export async function processNoPicks(players, allMatches) {
   // Agrupa jogos por dia
   const byDay = {}
