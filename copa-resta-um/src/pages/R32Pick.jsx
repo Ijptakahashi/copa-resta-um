@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitPick, removePick } from '../lib/supabase'
+import { getPlayerPicks, getMatches, submitPick, removePickByDate } from '../lib/supabase'
 import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
@@ -91,16 +91,19 @@ export default function R32Pick({ player }) {
   async function selectTeam(teamName, matchRecord, otherTeamName) {
     setError('')
     if (!marketOpen) { setError('O mercado do R32 já fechou. Suas picks estão travadas.'); return }
+    if (savingTeam) return   // trava cliques simultâneos — evita a race condition da 3ª pick
 
+    const pickDate = matchRecord.utc_date?.slice(0,10)
     const existing = pickForMatch(teamName, otherTeamName)
 
     // Clicar de novo na MESMA seleção já feita = desmarcar (remove a pick desse jogo)
     if (existing && existing.team_name === teamName) {
       setSavingTeam(teamName)
       try {
-        await removePick(matchRecord.utc_date?.slice(0,10), existing.id)
-        // Atualização otimista: tira do state local na hora, sem esperar releitura do banco
-        setAllPicks(prev => prev.filter(p => p.id !== existing.id))
+        // Remove pelo player_id + pick_date (fonte real no banco), nunca confia só
+        // no id local — que pode ser temporário se ainda não sincronizou com o banco.
+        await removePickByDate(player.id, pickDate)
+        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.pick_date===pickDate)))
       } catch (e) {
         setError('Erro ao remover: ' + e.message)
       } finally { setSavingTeam(null) }
@@ -109,12 +112,15 @@ export default function R32Pick({ player }) {
 
     if (isBurnedFromGroups(teamName)) { setError(`${teamName} está queimada — perdeu na fase de grupos.`); return }
 
-    // Trocar a pick desse jogo específico não conta como pick nova pro limite de 2,
-    // pois está substituindo a seleção já feita NESSE confronto.
-    const isSwap = !!existing
-    const effectiveSideCount = isSwap ? sideCount - 1 : sideCount
+    // Recalcula sideCount AGORA, na hora do clique — nunca usa valor "congelado" do render
+    // anterior, o que evita a race condition de cliques rápidos permitirem uma 3ª pick.
+    const freshSideCount = allPicks.filter(p =>
+      p.phase === 'r32' && p.team_name !== 'no_pick' &&
+      sideOfTeamShared(p.team_name, canonTeam) === side &&
+      p.pick_date !== pickDate   // exclui a pick deste mesmo jogo (é troca, não nova)
+    ).length
 
-    const v = validateR32Pick(knockoutPicks, teamName, side, effectiveSideCount)
+    const v = validateR32Pick(knockoutPicks, teamName, side, freshSideCount)
     if (!v.valid) { setError(v.reason); return }
 
     setSavingTeam(teamName)
