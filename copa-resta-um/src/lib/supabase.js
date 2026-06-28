@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
+import { canonTeam } from './gameLogic'
+import { sideOfTeam } from './r32bracket'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -164,6 +166,73 @@ export async function submitPick({ playerId, matchId, teamName, teamId, phase, p
   const { error } = await supabase.from('picks').insert({
     player_id: playerId, match_id: matchId, team_name: teamName,
     team_id: teamId, phase, pick_date: pickDate, is_repeat: isRepeat,
+  })
+  if (error) throw error
+}
+
+// ─── R32: versão com TRAVA DURA no banco (máx 2 picks por lado) ───
+// Esta é a ÚNICA forma segura de impedir 3+ picks: consulta o banco
+// AGORA, na hora da escrita — nunca confia em state do React, que pode
+// estar desatualizado por race condition (cliques rápidos em sequência).
+export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDate }) {
+  const side = sideOfTeam(teamName, canonTeam)
+  if (!side) throw new Error(`${teamName} não está no chaveamento do R32.`)
+
+  // 1. Já usada em qualquer fase do mata-mata? (R32, oitavas...) — busca direto no banco
+  const { data: knockoutPicks, error: koErr } = await supabase
+    .from('picks').select('team_name, phase')
+    .eq('player_id', playerId).neq('phase', 'groups').neq('team_name', 'no_pick')
+  if (koErr) throw koErr
+  const cTeam = canonTeam(teamName)
+  if ((knockoutPicks || []).some(p => canonTeam(p.team_name) === cTeam)) {
+    throw new Error(`${teamName} já foi escolhida no mata-mata. Não pode repetir.`)
+  }
+
+  // 2. Conta picks JÁ SALVAS no banco para esse lado, excluindo a pick deste
+  // MESMO jogo (pick_date), que seria uma troca e não uma pick nova.
+  const sideTeams = new Set(
+    (knockoutPicks || [])
+      .filter(p => p.phase === 'r32')
+      .map(p => p.team_name)
+  )
+  // Recarrega picks de R32 com pick_date pra excluir a troca corretamente
+  const { data: r32Rows, error: r32Err } = await supabase
+    .from('picks').select('team_name, pick_date')
+    .eq('player_id', playerId).eq('phase', 'r32').neq('team_name', 'no_pick')
+  if (r32Err) throw r32Err
+
+  const sideCountNow = (r32Rows || []).filter(p =>
+    p.pick_date !== pickDate &&                       // exclui a pick deste mesmo jogo (troca)
+    sideOfTeam(p.team_name, canonTeam) === side
+  ).length
+
+  if (sideCountNow >= 2) {
+    throw new Error(`Limite atingido: você já tem 2 seleções no lado ${side === 'left' ? 'esquerdo' : 'direito'}.`)
+  }
+
+  // 3. Trava por jogo: nunca mais de uma pick na mesma pick_date (upsert seguro)
+  const { data: existing, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('pick_date', pickDate)
+  if (readError) throw readError
+
+  if (existing && existing.length > 0) {
+    const processed = existing.find(p => p.result !== null && p.result !== undefined)
+    if (processed) throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
+    const keepId = existing[0].id
+    const { error } = await supabase.from('picks')
+      .update({ match_id: matchId, team_name: teamName, phase, is_repeat: false })
+      .eq('id', keepId)
+    if (error) throw error
+    if (existing.length > 1) {
+      await supabase.from('picks').delete().in('id', existing.slice(1).map(e => e.id))
+    }
+    return
+  }
+
+  const { error } = await supabase.from('picks').insert({
+    player_id: playerId, match_id: matchId, team_name: teamName,
+    team_id: 0, phase, pick_date: pickDate, is_repeat: false,
   })
   if (error) throw error
 }
