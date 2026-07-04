@@ -7,6 +7,79 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
+
+// ─── Oitavas/R16: fixtures oficiais do bolão ─────────────────
+// Garante que a tela de R16 não fique "PENDENTE" quando a API externa
+// ainda devolve jogos como TBD ou quando os jogos das oitavas não foram
+// sincronizados no Supabase.
+const R16_FIXED_MATCHES = [
+  { id: 53452509, home_team: 'Paraguay',       away_team: 'France',      utc_date: '2026-07-04T21:00:00.000Z' },
+  { id: 53452511, home_team: 'Canada',         away_team: 'Morocco',     utc_date: '2026-07-04T17:00:00.000Z' },
+  { id: 53452513, home_team: 'Portugal',       away_team: 'Spain',       utc_date: '2026-07-06T19:00:00.000Z' },
+  { id: 53452515, home_team: 'United States',  away_team: 'Belgium',     utc_date: '2026-07-07T00:00:00.000Z' },
+  { id: 53452517, home_team: 'Brazil',         away_team: 'Norway',      utc_date: '2026-07-05T20:00:00.000Z' },
+  { id: 53452519, home_team: 'Mexico',         away_team: 'England',     utc_date: '2026-07-06T00:00:00.000Z' },
+  { id: 53452521, home_team: 'Argentina',      away_team: 'Egypt',       utc_date: '2026-07-07T16:00:00.000Z' },
+  { id: 53452523, home_team: 'Colombia',       away_team: 'Switzerland', utc_date: '2026-07-07T20:00:00.000Z' },
+]
+
+function fixedTeamId(name) {
+  let h = 5381
+  for (let i = 0; i < name.length; i++) h = ((h << 5) + h) + name.charCodeAt(i)
+  return Math.abs(h) % 9000 + 1000
+}
+
+let r16MatchesEnsured = false
+
+async function ensureR16Matches() {
+  if (r16MatchesEnsured) return
+
+  try {
+    const ids = R16_FIXED_MATCHES.map(m => m.id)
+    const { data: existing, error } = await supabase
+      .from('matches')
+      .select('id, status, home_score, away_score, winner')
+      .in('id', ids)
+
+    if (error) throw error
+
+    const existingById = new Map((existing || []).map(m => [m.id, m]))
+
+    for (const fx of R16_FIXED_MATCHES) {
+      const row = {
+        id: fx.id,
+        home_team: fx.home_team,
+        away_team: fx.away_team,
+        home_team_id: fixedTeamId(fx.home_team),
+        away_team_id: fixedTeamId(fx.away_team),
+        utc_date: fx.utc_date,
+        stage: 'ROUND_OF_16',
+        group_name: null,
+      }
+
+      const current = existingById.get(fx.id)
+
+      if (current) {
+        // Atualiza nomes/data/stage, mas NÃO zera placar/resultados que o admin já tenha salvo.
+        await supabase.from('matches').update(row).eq('id', fx.id)
+      } else {
+        await supabase.from('matches').insert({
+          ...row,
+          status: 'SCHEDULED',
+          home_score: null,
+          away_score: null,
+          winner: null,
+        })
+      }
+    }
+  } catch (e) {
+    // Fail-safe: se por algum motivo não conseguir inserir, o app continua abrindo.
+    console.warn('ensureR16Matches falhou:', e.message)
+  } finally {
+    r16MatchesEnsured = true
+  }
+}
+
 // ─── Auth helpers ─────────────────────────────────────────────
 async function hashPassword(password) {
   const data = new TextEncoder().encode(password)
@@ -69,6 +142,7 @@ export async function addPlayer(name) {
 
 // ─── Matches ──────────────────────────────────────────────────
 export async function getMatches() {
+  await ensureR16Matches()
   const { data, error } = await supabase.from('matches').select('*').order('utc_date')
   if (error) throw error
   return data
