@@ -348,3 +348,36 @@ export function isR32Open(allMatches) {
   if (!dl) return true   // fail-safe: sem deadline calculável = mercado aberto
   return new Date() < dl
 }
+
+
+// ─── R16 — Oitavas de Final (1 pick por lado) ──────────────────────
+export function validateR16Pick(allKnockoutPicks, teamName, side, sidePicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida no mata-mata. Não pode repetir.` }
+  }
+
+  if (sidePicksCount >= 1) {
+    return { valid: false, reason: `Você já escolheu 1 seleção do lado ${side === 'left' ? 'esquerdo' : 'direito'}.` }
+  }
+
+  return { valid: true }
+}
+
+export function r16Deadline(allMatches) {
+  const r16Matches = allMatches.filter(m => m.stage === 'ROUND_OF_16')
+  if (!r16Matches.length) return null
+  const valid = r16Matches.map(m => new Date(m.utc_date)).filter(d => !isNaN(d.getTime()))
+  if (!valid.length) return null
+  const earliest = valid.reduce((min, d) => d < min ? d : min, valid[0])
+  return new Date(earliest.getTime() - 30 * 60 * 1000)
+}
+
+export function isR16Open(allMatches) {
+  const dl = r16Deadline(allMatches)
+  if (!dl) return true
+  return new Date() < dl
+}

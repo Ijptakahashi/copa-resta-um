@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitR32Pick, removePickByMatch } from '../lib/supabase'
-import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
+import { getPlayerPicks, getMatches, submitR16Pick, removeR16PickByMatch } from '../lib/supabase'
+import { validateR16Pick, canonTeam, r16Deadline, isR16Open } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
-import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
+import { R16_BRACKET, sideOfTeamR16 as sideOfTeamShared } from '../lib/r16bracket'
 
 function DeadlineCountdown({ deadline }) {
   const [t, setT] = useState({ d:'--', h:'--', m:'--', s:'--' })
@@ -24,7 +24,7 @@ function DeadlineCountdown({ deadline }) {
   return <span style={{fontFamily:'Sora',fontWeight:800,color:'#C4302B'}}>{t.d}d {t.h}:{t.m}:{t.s}</span>
 }
 
-export default function R32Pick({ player }) {
+export default function R16Pick({ player }) {
   const navigate = useNavigate()
   const [allPicks, setAllPicks]     = useState([])
   const [matches, setMatches]       = useState([])
@@ -48,30 +48,30 @@ export default function R32Pick({ player }) {
     const [picks, ms] = await Promise.all([getPlayerPicks(player.id), getMatches()])
     setAllPicks(picks)
     setMatches(ms)
-    setDeadline(r32Deadline(ms))
-    setMarketOpen(isR32Open(ms))
+    setDeadline(r16Deadline(ms))
+    setMarketOpen(isR16Open(ms))
     setLoading(false)
   }
 
-  // Picks de R32 já confirmadas no banco — fonte única da verdade (sem state duplicado)
-  const r32Picks = allPicks.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
+  // Picks de R16 já confirmadas no banco — fonte única da verdade (sem state duplicado)
+  const r16Picks = allPicks.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
   const knockoutPicks = allPicks.filter(p => p.phase && p.phase !== 'groups')
 
   function pickForMatch(home, away) {
     const cH = canonTeam(home), cA = canonTeam(away)
-    return r32Picks.find(p => {
+    return r16Picks.find(p => {
       const c = canonTeam(p.team_name)
       return c === cH || c === cA
     })
   }
 
-  const leftPicks  = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left')
-  const rightPicks = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right')
+  const leftPicks  = r16Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left')
+  const rightPicks = r16Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right')
   const leftCount  = leftPicks.length
   const rightCount = rightPicks.length
   const sideCount  = side === 'left' ? leftCount : rightCount
-  const sideLocked = sideCount >= 2   // 2 picks confirmadas = lado travado (mesmo com mercado aberto, decisão já feita)
-  const matchesOfSide = R32_BRACKET[side]
+  const sideLocked = sideCount >= 1   // 1 pick confirmada = lado travado (mesmo com mercado aberto, decisão já feita)
+  const matchesOfSide = R16_BRACKET[side]
 
   function findMatchRecord(home, away) {
     const cH = canonTeam(home), cA = canonTeam(away)
@@ -81,7 +81,7 @@ export default function R32Pick({ player }) {
     })
   }
 
-  // Time já queimado nos grupos (perdeu) não pode ser escolhido no R32
+  // Time já queimado nos grupos (perdeu) não pode ser escolhido no R16
   function isBurnedFromGroups(teamName) {
     const c = canonTeam(teamName)
     return allPicks.some(p =>
@@ -90,7 +90,7 @@ export default function R32Pick({ player }) {
 
   async function selectTeam(teamName, matchRecord, otherTeamName) {
     setError('')
-    if (!marketOpen) { setError('O mercado do R32 já fechou. Suas picks estão travadas.'); return }
+    if (!marketOpen) { setError('O mercado do R16 já fechou. Suas picks estão travadas.'); return }
     if (savingTeam) return   // trava cliques simultâneos — evita a race condition da 3ª pick
 
     const pickDate = matchRecord.utc_date?.slice(0,10)
@@ -102,8 +102,8 @@ export default function R32Pick({ player }) {
       try {
         // Remove pelo match_id (chave real do jogo no MM) — nunca por pick_date,
         // que pode ser compartilhada por dois jogos do mesmo dia.
-        await removePickByMatch(player.id, matchRecord.id)
-        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.match_id===matchRecord.id)))
+        await removeR16PickByMatch(player.id, matchRecord.id)
+        setAllPicks(prev => prev.filter(p => !(p.phase==='r16' && p.match_id===matchRecord.id)))
       } catch (e) {
         setError('Erro ao remover: ' + e.message)
       } finally { setSavingTeam(null) }
@@ -115,20 +115,20 @@ export default function R32Pick({ player }) {
     // Recalcula sideCount AGORA, na hora do clique — nunca usa valor "congelado" do render
     // anterior, o que evita a race condition de cliques rápidos permitirem uma 3ª pick.
     const freshSideCount = allPicks.filter(p =>
-      p.phase === 'r32' && p.team_name !== 'no_pick' &&
+      p.phase === 'r16' && p.team_name !== 'no_pick' &&
       sideOfTeamShared(p.team_name, canonTeam) === side &&
       p.match_id !== matchRecord.id   // exclui a pick deste mesmo jogo (é troca, não nova)
     ).length
 
-    const v = validateR32Pick(knockoutPicks, teamName, side, freshSideCount)
+    const v = validateR16Pick(knockoutPicks, teamName, side, freshSideCount)
     if (!v.valid) { setError(v.reason); return }
 
     setSavingTeam(teamName)
     try {
-      await submitR32Pick({
+      await submitR16Pick({
         playerId: player.id,
         matchId: matchRecord.id,
-        teamName, phase: 'r32',
+        teamName, phase: 'r16',
         pickDate: matchRecord.utc_date?.slice(0,10),
       })
       // Atualização OTIMISTA: atualiza a tela na hora, sem esperar reler do banco
@@ -137,7 +137,7 @@ export default function R32Pick({ player }) {
         const withoutOld = existing ? prev.filter(p => p.id !== existing.id) : prev
         const newPickId = existing?.id || `temp-${matchRecord.id}`
         return [...withoutOld, {
-          id: newPickId, phase: 'r32', team_name: teamName,
+          id: newPickId, phase: 'r16', team_name: teamName,
           pick_date: matchRecord.utc_date?.slice(0,10),
           match_id: matchRecord.id, result: null, is_repeat: false,
         }]
@@ -161,10 +161,10 @@ export default function R32Pick({ player }) {
   // Bloqueia a tela inteira e obriga o jogador a remover o excedente antes
   // de fazer qualquer outra coisa. Mais simples e confiável do que corrigir
   // via SQL pra cada usuário afetado individualmente.
-  const overflowSide = leftCount > 2 ? 'left' : rightCount > 2 ? 'right' : null
+  const overflowSide = leftCount > 1 ? 'left' : rightCount > 1 ? 'right' : null
   if (overflowSide) {
     const overflowPicks = overflowSide === 'left' ? leftPicks : rightPicks
-    const excess = overflowPicks.length - 2
+    const excess = overflowPicks.length - 1
     return (
       <div style={{ maxWidth:430, margin:'0 auto', background:'#F8F4EE', minHeight:'100svh' }}>
         <div style={{ padding:'24px 16px' }}>
@@ -176,7 +176,7 @@ export default function R32Pick({ player }) {
             </div>
             <div style={{ fontSize:13, color:'#6B6B5E', marginTop:8, fontFamily:'Inter', lineHeight:1.5 }}>
               Você tem <b>{overflowPicks.length} seleções</b> no lado {overflowSide==='left'?'esquerdo':'direito'},
-              mas o máximo permitido é <b>2</b>. Remova {excess === 1 ? 'uma seleção' : `${excess} seleções`} abaixo
+              mas o máximo permitido é <b>1</b>. Remova {excess === 1 ? 'uma seleção' : `${excess} seleções`} abaixo
               tocando nela para continuar.
             </div>
           </div>
@@ -195,7 +195,7 @@ export default function R32Pick({ player }) {
                   if (savingTeam) return
                   setSavingTeam(pick.team_name); setError('')
                   try {
-                    await removePickByMatch(player.id, pick.match_id)
+                    await removeR16PickByMatch(player.id, pick.match_id)
                     setAllPicks(prev => prev.filter(p => p.match_id !== pick.match_id))
                   } catch (e) { setError('Erro ao remover: ' + e.message) }
                   finally { setSavingTeam(null) }
@@ -238,9 +238,9 @@ export default function R32Pick({ player }) {
       {/* padding bottom generoso pra não esconder nada atrás da navbar fixa */}
       <div style={{ padding:'14px 16px 110px' }}>
         <div style={{ fontFamily:'Sora', fontWeight:800, fontSize:26, color:'#1A3D28',
-          letterSpacing:'-1px', lineHeight:1.05 }}>SUAS PICKS<br/>R32</div>
+          letterSpacing:'-1px', lineHeight:1.05 }}>SUAS PICKS<br/>R16</div>
         <div style={{ fontSize:12, color:'#9A9384', marginTop:4 }}>
-          Escolha 2 seleções de cada lado da chave — válidas para toda a fase
+          Escolha 1 seleção de cada lado da chave — válidas para toda a fase
         </div>
 
         {deadline && marketOpen && (
@@ -248,7 +248,7 @@ export default function R32Pick({ player }) {
             display:'flex', alignItems:'center', gap:8, border:'1px solid rgba(196,48,43,.15)' }}>
             <Lock size={13} color="#C4302B"/>
             <span style={{ fontFamily:'Sora', fontWeight:600, fontSize:12, color:'#C4302B' }}>
-              Picks do R32 fecham em <DeadlineCountdown deadline={deadline}/>
+              Picks do R16 fecham em <DeadlineCountdown deadline={deadline}/>
             </span>
           </div>
         )}
@@ -257,14 +257,14 @@ export default function R32Pick({ player }) {
             textAlign:'center', border:'1px solid rgba(26,61,40,.15)' }}>
             <Check size={20} color="#1A3D28" style={{ marginBottom:6 }}/>
             <div style={{ fontFamily:'Sora', fontWeight:700, color:'#1A3D28', fontSize:14 }}>MERCADO FECHADO</div>
-            <div style={{ fontSize:11, color:'#6B6B5E', marginTop:2 }}>Suas picks do R32 estão travadas.</div>
+            <div style={{ fontSize:11, color:'#6B6B5E', marginTop:2 }}>Suas picks do R16 estão travadas.</div>
           </div>
         )}
 
         {/* Progress geral (2 barras = 2 lados) */}
         <div style={{ display:'flex', gap:6, margin:'14px 0' }}>
           {[0,1].map(i => <div key={i} style={{ flex:1, height:5, borderRadius:3,
-            background: i===0 ? (leftCount===2?'#C9A44A':'#E5DFD2') : (rightCount===2?'#C9A44A':'#E5DFD2') }}/>)}
+            background: i===0 ? (leftCount===1?'#C9A44A':'#E5DFD2') : (rightCount===1?'#C9A44A':'#E5DFD2') }}/>)}
         </div>
 
         {/* Side toggle com selo de confirmado em cada lado */}
@@ -280,7 +280,7 @@ export default function R32Pick({ player }) {
                   color: side===s ? '#1A3D28' : '#B0A898',
                   boxShadow: side===s ? '0 1px 4px rgba(0,0,0,.08)' : 'none' }}>
                 {s==='left' ? '◀ ESQUERDO' : 'DIREITO ▶'}
-                {cnt===2 && <Check size={12} color="#1A3D28"/>}
+                {cnt===1 && <Check size={12} color="#1A3D28"/>}
               </button>
             )
           })}
@@ -297,7 +297,7 @@ export default function R32Pick({ player }) {
             </div>
             <div style={{ fontFamily:'Sora', fontWeight:800, fontSize:20, color:'#fff', marginTop:2,
               display:'flex', alignItems:'center', gap:8 }}>
-              {sideCount} / 2
+              {sideCount} / 1
               {sideLocked && (
                 <span style={{ fontFamily:'Sora', fontSize:9, fontWeight:700, color:'#1A3D28',
                   background:'#C9A44A', padding:'3px 8px', borderRadius:10, letterSpacing:'.04em' }}>
@@ -307,7 +307,7 @@ export default function R32Pick({ player }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:5 }}>
-            {[0,1].map(i => <div key={i} style={{ width:9, height:9, borderRadius:'50%',
+            {[0].map(i => <div key={i} style={{ width:9, height:9, borderRadius:'50%',
               background: i < sideCount ? '#C9A44A' : 'rgba(255,255,255,.2)' }}/>)}
           </div>
         </div>
@@ -315,7 +315,7 @@ export default function R32Pick({ player }) {
         {sideLocked && marketOpen && (
           <div style={{ background:'#FBF7EC', borderRadius:10, padding:'10px 14px', marginBottom:12,
             fontSize:11, color:'#A07830', fontFamily:'Inter', border:'1px solid rgba(201,164,74,.25)' }}>
-            Suas 2 picks deste lado estão confirmadas. Toque em outra seleção de um mesmo jogo para substituir, até o mercado fechar.
+            Sua pick deste lado está confirmada. Toque em outra seleção de um mesmo jogo para substituir, até o mercado fechar.
           </div>
         )}
 
@@ -355,7 +355,7 @@ export default function R32Pick({ player }) {
                   const burned = isBurnedFromGroups(teamName)
                   const isSaving = savingTeam === teamName
                   const code = countryCode(teamName)
-                  // sideLocked (2/2 picks) bloqueia escolher um time NOVO num jogo sem pick ainda,
+                  // sideLocked (1/1 pick) bloqueia escolher um time NOVO num jogo sem pick ainda,
                   // mas sempre permite trocar dentro de um jogo que já tem pick (substituição).
                   const canSwapHere = !!currentPick   // este jogo já tem uma pick — pode trocar à vontade
                   const isBlocked = pending || burned || !marketOpen || (sideLocked && !isSel && !canSwapHere)

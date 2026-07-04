@@ -1,8 +1,9 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, canonTeam } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, canonTeam } from './gameLogic'
 import { R32_BRACKET, sideOfTeam } from './r32bracket'
+import { sideOfTeamR16 } from './r16bracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -379,6 +380,79 @@ export async function processR32Penalties(players) {
         else console.warn('processR32Penalties insert error:', error.message)
       } catch (e) {
         console.warn(`processR32Penalties: falhou para player ${player.id}:`, e.message)
+      }
+    }
+  }
+  return penalized
+}
+
+
+
+// ─── Penalidade por picks faltantes no R16/Oitavas (1 por lado, 2 no total) ───
+export async function processR16Penalties(players) {
+  const allMatches = await getMatches()
+  if (isR16Open(allMatches)) return 0
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const r16Picks = picks.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
+
+    const leftPicksList  = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'left')
+    const rightPicksList = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'right')
+    const leftCount  = leftPicksList.length
+    const rightCount = rightPicksList.length
+
+    const leftInvalid  = leftCount > 1
+    const rightInvalid = rightCount > 1
+
+    const missingLeft  = leftInvalid  ? 1 : Math.max(0, 1 - leftCount)
+    const missingRight = rightInvalid ? 1 : Math.max(0, 1 - rightCount)
+    const missingTotal = missingLeft + missingRight
+    if (missingTotal === 0) continue
+
+    if (leftInvalid) {
+      for (const p of leftPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    if (rightInvalid) {
+      for (const p of rightPicksList) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'r16' && p.team_name === 'no_pick').length
+    const toCreate = missingTotal - alreadyPenalized
+    if (toCreate <= 0) continue
+
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeR16Matches = allMatches
+      .filter(m => m.stage === 'ROUND_OF_16' && !usedMatchIds.has(m.id))
+
+    for (let i = 0; i < toCreate; i++) {
+      const m = freeR16Matches[i]
+      if (!m) {
+        console.warn(`processR16Penalties: sem match_id livre para player ${player.id} (penalidade ${i+1}/${toCreate} não gravada)`)
+        break
+      }
+      try {
+        const { error } = await supabase.from('picks').insert({
+          player_id: player.id,
+          match_id: m.id,
+          team_name: 'no_pick',
+          team_id: 0,
+          phase: 'r16',
+          pick_date: toLocalDateISO(m.utc_date),
+          is_repeat: false,
+          result: 'no_pick',
+          lives_lost: 1,
+        })
+        if (!error) penalized++
+        else console.warn('processR16Penalties insert error:', error.message)
+      } catch (e) {
+        console.warn(`processR16Penalties: falhou para player ${player.id}:`, e.message)
       }
     }
   }

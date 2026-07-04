@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { canonTeam } from './gameLogic'
 import { sideOfTeam } from './r32bracket'
+import { sideOfTeamR16 } from './r16bracket'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -231,6 +232,71 @@ export async function submitR32Pick({ playerId, matchId, teamName, phase, pickDa
     player_id: playerId, match_id: matchId, team_name: teamName,
     team_id: 0, phase, pick_date: pickDate, is_repeat: false,
   })
+  if (error) throw error
+}
+
+
+
+// ─── R16/Oitavas: trava dura no banco (máx 1 pick por lado) ───
+export async function submitR16Pick({ playerId, matchId, teamName, phase, pickDate }) {
+  const side = sideOfTeamR16(teamName, canonTeam)
+  if (!side) throw new Error(`${teamName} não está no chaveamento das oitavas.`)
+
+  const { data: knockoutPicks, error: koErr } = await supabase
+    .from('picks').select('id, team_name, phase, match_id')
+    .eq('player_id', playerId).neq('phase', 'groups').neq('team_name', 'no_pick')
+  if (koErr) throw koErr
+
+  const cTeam = canonTeam(teamName)
+  if ((knockoutPicks || []).some(p =>
+        canonTeam(p.team_name) === cTeam && p.match_id !== matchId)) {
+    throw new Error(`${teamName} já foi escolhida no mata-mata. Não pode repetir.`)
+  }
+
+  const sideCountNow = (knockoutPicks || []).filter(p =>
+    p.phase === 'r16' &&
+    p.match_id !== matchId &&
+    sideOfTeamR16(p.team_name, canonTeam) === side
+  ).length
+
+  if (sideCountNow >= 1) {
+    throw new Error(`Limite atingido: você já tem 1 seleção no lado ${side === 'left' ? 'esquerdo' : 'direito'}.`)
+  }
+
+  const { data: existing, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r16')
+    .maybeSingle()
+  if (readError && readError.code !== 'PGRST116') throw readError
+  if (existing && existing.result !== null && existing.result !== undefined) {
+    throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
+  }
+
+  if (existing) {
+    const { error } = await supabase.from('picks')
+      .update({ team_name: teamName, team_id: 0, phase, pick_date: pickDate, is_repeat: false })
+      .eq('id', existing.id)
+      .is('result', null)
+    if (error) throw error
+    return
+  }
+
+  const { error } = await supabase.from('picks').insert({
+    player_id: playerId, match_id: matchId, team_name: teamName,
+    team_id: 0, phase, pick_date: pickDate, is_repeat: false,
+  })
+  if (error) throw error
+}
+
+export async function removeR16PickByMatch(playerId, matchId) {
+  const { data, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'r16')
+  if (readError) throw readError
+  if (!data || !data.length) return
+  const processed = data.find(p => p.result !== null && p.result !== undefined)
+  if (processed) throw new Error('Esta pick já foi processada e não pode mais ser removida.')
+  const { error } = await supabase.from('picks').delete().in('id', data.map(p => p.id))
   if (error) throw error
 }
 

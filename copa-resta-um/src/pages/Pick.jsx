@@ -8,6 +8,7 @@ import FlagImage from '../components/FlagImage'
 import { ShieldIcon } from '../components/ShieldLives'
 import { PickSkeleton } from '../components/Skeletons'
 import R32Pick from './R32Pick'
+import R16Pick from './R16Pick'
 
 // Canonical name for robust deduplication
 function canon(n='') {
@@ -347,7 +348,7 @@ function GroupsPick({ player }) {
 // Critério: se existir QUALQUER jogo de ROUND_OF_32 no banco e a fase de
 // grupos já não tiver jogos futuros, mostra a tela do mata-mata (R32).
 export default function Pick({ player }) {
-  const [phaseMode, setPhaseMode] = useState(null) // 'groups' | 'r32' | null=loading
+  const [phaseMode, setPhaseMode] = useState(null) // 'groups' | 'r32' | 'r16' | null=loading
 
   useEffect(() => {
     let alive = true
@@ -361,15 +362,22 @@ export default function Pick({ player }) {
         toLocalDateISO(m.utc_date) >= today
       )
       const hasR32Games = ms.some(m => m.stage === 'ROUND_OF_32')
+      const hasR16Games = ms.some(m => m.stage === 'ROUND_OF_16')
+      const hasFutureR32Games = ms.some(m =>
+        m.stage === 'ROUND_OF_32' &&
+        toLocalDateISO(m.utc_date) >= today
+      )
 
       if (!alive) return
-      setPhaseMode(hasR32Games && !hasFutureGroupGames ? 'r32' : 'groups')
+      if (hasR16Games && !hasFutureR32Games && !hasFutureGroupGames) setPhaseMode('r16')
+      else setPhaseMode(hasR32Games && !hasFutureGroupGames ? 'r32' : 'groups')
     }
     detect()
     return () => { alive = false }
   }, [])
 
   if (phaseMode === null) return <PickSkeleton/>
+  if (phaseMode === 'r16') return <R16Pick player={player}/>
   if (phaseMode === 'r32') return <R32Pick player={player}/>
   return <GroupsPick player={player}/>
 }
