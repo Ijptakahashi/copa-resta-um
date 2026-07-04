@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Check, Lock, RefreshCw } from 'lucide-react'
-import { getPlayerPicks, getMatches, submitR32Pick, removePickByMatch } from '../lib/supabase'
-import { validateR32Pick, canonTeam, r32Deadline, isR32Open } from '../lib/gameLogic'
+import { getPlayerPicks, getMatches, submitR32Pick, removePickByDate } from '../lib/supabase'
+import { validateR32Pick, canonTeam, r32Deadline, isR32Open, toLocalDateISO } from '../lib/gameLogic'
 import { countryCode } from '../components/FlagImage'
 import { R32_BRACKET, sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
 
@@ -93,17 +93,17 @@ export default function R32Pick({ player }) {
     if (!marketOpen) { setError('O mercado do R32 já fechou. Suas picks estão travadas.'); return }
     if (savingTeam) return   // trava cliques simultâneos — evita a race condition da 3ª pick
 
-    const pickDate = matchRecord.utc_date?.slice(0,10)
+    const pickDate = toLocalDateISO(matchRecord.utc_date)
     const existing = pickForMatch(teamName, otherTeamName)
 
     // Clicar de novo na MESMA seleção já feita = desmarcar (remove a pick desse jogo)
     if (existing && existing.team_name === teamName) {
       setSavingTeam(teamName)
       try {
-        // Remove pelo match_id (chave real do jogo no MM) — nunca por pick_date,
-        // que pode ser compartilhada por dois jogos do mesmo dia.
-        await removePickByMatch(player.id, matchRecord.id)
-        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.match_id===matchRecord.id)))
+        // Remove pelo player_id + pick_date (fonte real no banco), nunca confia só
+        // no id local — que pode ser temporário se ainda não sincronizou com o banco.
+        await removePickByDate(player.id, pickDate)
+        setAllPicks(prev => prev.filter(p => !(p.phase==='r32' && p.pick_date===pickDate)))
       } catch (e) {
         setError('Erro ao remover: ' + e.message)
       } finally { setSavingTeam(null) }
@@ -117,7 +117,7 @@ export default function R32Pick({ player }) {
     const freshSideCount = allPicks.filter(p =>
       p.phase === 'r32' && p.team_name !== 'no_pick' &&
       sideOfTeamShared(p.team_name, canonTeam) === side &&
-      p.match_id !== matchRecord.id   // exclui a pick deste mesmo jogo (é troca, não nova)
+      p.pick_date !== pickDate   // exclui a pick deste mesmo jogo (é troca, não nova)
     ).length
 
     const v = validateR32Pick(knockoutPicks, teamName, side, freshSideCount)
@@ -129,7 +129,7 @@ export default function R32Pick({ player }) {
         playerId: player.id,
         matchId: matchRecord.id,
         teamName, phase: 'r32',
-        pickDate: matchRecord.utc_date?.slice(0,10),
+        pickDate: toLocalDateISO(matchRecord.utc_date),
       })
       // Atualização OTIMISTA: atualiza a tela na hora, sem esperar reler do banco
       // (corrige o atraso de leitura que obrigava a dar refresh manual)
@@ -138,7 +138,7 @@ export default function R32Pick({ player }) {
         const newPickId = existing?.id || `temp-${matchRecord.id}`
         return [...withoutOld, {
           id: newPickId, phase: 'r32', team_name: teamName,
-          pick_date: matchRecord.utc_date?.slice(0,10),
+          pick_date: toLocalDateISO(matchRecord.utc_date),
           match_id: matchRecord.id, result: null, is_repeat: false,
         }]
       })
@@ -195,8 +195,8 @@ export default function R32Pick({ player }) {
                   if (savingTeam) return
                   setSavingTeam(pick.team_name); setError('')
                   try {
-                    await removePickByMatch(player.id, pick.match_id)
-                    setAllPicks(prev => prev.filter(p => p.match_id !== pick.match_id))
+                    await removePickByDate(player.id, pick.pick_date)
+                    setAllPicks(prev => prev.filter(p => p.pick_date !== pick.pick_date))
                   } catch (e) { setError('Erro ao remover: ' + e.message) }
                   finally { setSavingTeam(null) }
                 }}
@@ -336,7 +336,7 @@ export default function R32Pick({ player }) {
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8,
                 fontFamily:'Sora', fontSize:9, fontWeight:700, letterSpacing:'.08em',
                 color:'#B0A898', textTransform:'uppercase' }}>
-                <span>{pending ? 'PENDENTE' : (rec.utc_date?.slice(0,10) || '')}</span>
+                <span>{pending ? 'PENDENTE' : (toLocalDateISO(rec.utc_date) || '')}</span>
                 {currentPick && marketOpen && (
                   <span style={{ color:'#1A3D28', display:'flex', alignItems:'center', gap:3 }}
                     title="Toque na seleção escolhida para remover">
