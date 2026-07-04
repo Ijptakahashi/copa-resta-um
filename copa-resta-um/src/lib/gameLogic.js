@@ -160,7 +160,9 @@ export function buildInventory(picks) {
 export function canonTeam(n='') {
   const map = {'czechia':'czech republic','korea republic':'south korea','korea rep.':'south korea',
     'bosnia & herzegovina':'bosnia and herzegovina','bosnia-herzegovina':'bosnia and herzegovina',
-    'usa':'united states','türkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
+    'usa':'united states','united states of america':'united states','u.s.a.':'united states',
+    'türkiye':'turkey','turkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
+    'côte d’ivoire':'ivory coast',"côte d'ivoire":'ivory coast',"cote d'ivoire":'ivory coast',
     'ir iran':'iran'}
   const s=String(n).toLowerCase().trim(); return map[s]||s
 }
@@ -368,12 +370,10 @@ export function validateR16Pick(allKnockoutPicks, teamName, side, sidePicksCount
 }
 
 export function r16Deadline(allMatches) {
-  const r16Matches = allMatches.filter(m => m.stage === 'ROUND_OF_16')
-  if (!r16Matches.length) return null
-  const valid = r16Matches.map(m => new Date(m.utc_date)).filter(d => !isNaN(d.getTime()))
-  if (!valid.length) return null
-  const earliest = valid.reduce((min, d) => d < min ? d : min, valid[0])
-  return new Date(earliest.getTime() - 30 * 60 * 1000)
+  // Fechamento excepcional das oitavas: 04/07/2026 às 13:55 no horário de Brasília.
+  // Em UTC isso é 2026-07-04T16:55:00Z.
+  // Fica fixo para não depender de como a API externa cadastrou o primeiro jogo da fase.
+  return new Date('2026-07-04T16:55:00.000Z')
 }
 
 export function isR16Open(allMatches) {
