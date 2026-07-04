@@ -88,6 +88,16 @@ export default function R16Pick({ player }) {
       p.phase === 'groups' && canonTeam(p.team_name) === c && p.result === 'loss')
   }
 
+  // Time já usado em QUALQUER fase anterior do mata-mata (ex.: escolhido no R32)
+  // NÃO pode ser repetido no R16. Considera usado se aparece numa fase de MM
+  // diferente da atual, OU nesta fase mas em outro jogo.
+  function isUsedInKnockout(teamName) {
+    const c = canonTeam(teamName)
+    return allPicks.some(p =>
+      p.team_name !== 'no_pick' && p.phase && p.phase !== 'groups' &&
+      canonTeam(p.team_name) === c && p.phase !== 'r16')
+  }
+
   async function selectTeam(teamName, matchRecord, otherTeamName) {
     setError('')
     if (!marketOpen) { setError('O mercado do R16 já fechou. Suas picks estão travadas.'); return }
@@ -111,6 +121,7 @@ export default function R16Pick({ player }) {
     }
 
     if (isBurnedFromGroups(teamName)) { setError(`${teamName} está queimada — perdeu na fase de grupos.`); return }
+    if (isUsedInKnockout(teamName)) { setError(`${teamName} já foi escolhida em outra fase do mata-mata. Não pode repetir.`); return }
 
     // Recalcula sideCount AGORA, na hora do clique — nunca usa valor "congelado" do render
     // anterior, o que evita a race condition de cliques rápidos permitirem uma 3ª pick.
@@ -353,20 +364,22 @@ export default function R16Pick({ player }) {
                 {[m.home, m.away].map((teamName, i) => {
                   const isSel = currentPick && currentPick.team_name === teamName
                   const burned = isBurnedFromGroups(teamName)
+                  const usedElsewhere = !isSel && isUsedInKnockout(teamName)
+                  const unavailable = burned || usedElsewhere
                   const isSaving = savingTeam === teamName
                   const code = countryCode(teamName)
                   // sideLocked (1/1 pick) bloqueia escolher um time NOVO num jogo sem pick ainda,
                   // mas sempre permite trocar dentro de um jogo que já tem pick (substituição).
                   const canSwapHere = !!currentPick   // este jogo já tem uma pick — pode trocar à vontade
-                  const isBlocked = pending || burned || !marketOpen || (sideLocked && !isSel && !canSwapHere)
+                  const isBlocked = pending || unavailable || !marketOpen || (sideLocked && !isSel && !canSwapHere)
                   return (
                     <div key={i}
                       onClick={() => !isBlocked && selectTeam(teamName, rec, i===0?m.away:m.home)}
                       style={{ flex:1, display:'flex', alignItems:'center', gap:8, padding:'8px 10px',
-                        borderRadius:10, border:`1.5px solid ${isSel?'#1A3D28':burned?'rgba(196,48,43,.3)':'rgba(0,0,0,.07)'}`,
-                        background: isSel ? 'rgba(26,61,40,.06)' : burned ? '#FEF5F5' : 'transparent',
+                        borderRadius:10, border:`1.5px solid ${isSel?'#1A3D28':unavailable?'rgba(196,48,43,.3)':'rgba(0,0,0,.07)'}`,
+                        background: isSel ? 'rgba(26,61,40,.06)' : unavailable ? '#FEF5F5' : 'transparent',
                         cursor: isBlocked ? 'not-allowed' : 'pointer',
-                        opacity: burned ? .6 : 1,
+                        opacity: unavailable ? .55 : 1,
                         position:'relative' }}>
                       {isSaving && (
                         <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,.7)',
@@ -377,7 +390,15 @@ export default function R16Pick({ player }) {
                       {code && <img src={`https://flagcdn.com/w40/${code}.png`} width={24} height={17}
                         style={{ borderRadius:3, flexShrink:0 }} alt=""/>}
                       <span style={{ fontFamily:'Sora', fontWeight:600, fontSize:12, color:'#1A1A1A',
-                        textDecoration: burned ? 'line-through' : 'none' }}>{teamName}</span>
+                        textDecoration: unavailable ? 'line-through' : 'none' }}>{teamName}</span>
+                      {usedElsewhere && (
+                        <span style={{ fontFamily:'Sora', fontSize:8, fontWeight:700, color:'#C4302B',
+                          marginLeft:'auto', flexShrink:0 }}>JÁ USADA</span>
+                      )}
+                      {burned && !usedElsewhere && (
+                        <span style={{ fontFamily:'Sora', fontSize:8, fontWeight:700, color:'#C4302B',
+                          marginLeft:'auto', flexShrink:0 }}>QUEIMADA</span>
+                      )}
                       {isSel && (
                         <div title="Toque para remover esta escolha"
                           style={{ width:16, height:16, borderRadius:'50%', background:'#1A3D28',
