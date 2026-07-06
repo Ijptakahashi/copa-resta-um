@@ -301,15 +301,17 @@ export default function Dashboard({ player }) {
     }).sort((a,b) => b.lives-a.lives||b.correct-a.correct)
     setLeaders(ranked.slice(0,5))
 
-    // Detecta fase ativa do mata-mata e calcula progresso de picks por lado
-    const hasFutureGroupGames = allMs.some(m =>
-      (m.stage === 'GROUP_STAGE' || !m.stage) && toLocalDateISO(m.utc_date) >= today)
-    const hasFutureR32Games = allMs.some(m =>
-      m.stage === 'ROUND_OF_32' && toLocalDateISO(m.utc_date) >= today)
+    // Detecta fase ativa do mata-mata.
+    // ANCORA nos deadlines fixos (fonte de verdade), NÃO em "há jogos futuros
+    // de fase anterior" — que é frágil: uma única linha placeholder mal
+    // classificada (ex.: 'L101 x L102' marcada GROUP_STAGE com data no futuro,
+    // ou stage nulo) derrubava a detecção e revertia o app pra UI de grupos.
     const hasR32Games = allMs.some(m => m.stage === 'ROUND_OF_32')
     const hasR16Games = allMs.some(m => m.stage === 'ROUND_OF_16')
-    const r16Active = hasR16Games && !hasFutureR32Games && !hasFutureGroupGames
-    const r32Active = !r16Active && hasR32Games && !hasFutureGroupGames
+
+    // Fase mais avançada cujo mercado já fechou vence. R16 tem prioridade sobre R32.
+    const r16Active = hasR16Games && !isR16Open(allMs)
+    const r32Active = !r16Active && hasR32Games && !isR32Open(allMs)
     setIsR32(r16Active || r32Active)
     if (r16Active) {
       const r16Picks = pp.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
