@@ -48,6 +48,12 @@ export default function Admin({ player }) {
     try {
       const players = await getPlayers()
       const r = await setMatchResultManual(m.home_team, m.away_team, hNum, aNum, players)
+      // setMatchResultManual já roda syncResults(→processPicks) e processNoPicks,
+      // mas NÃO as penalidades de mata-mata. Se este resultado fechou o mercado
+      // de uma fase ou eliminou alguém, aplica as penalidades de R32/R16 aqui
+      // pra o desconto de vida ser imediato, sem exigir clicar REPROCESSAR.
+      await processR32Penalties(players)
+      await processR16Penalties(players)
       setMsg(`✓ Salvo: ${r.match}`)
       // Limpa o state local desse jogo pra próxima edição ler do banco atualizado
       setScores(prev => { const n = {...prev}; delete n[m.id]; return n })
@@ -204,4 +210,3 @@ export default function Admin({ player }) {
     </div>
   )
 }
-
