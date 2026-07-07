@@ -227,6 +227,7 @@ export async function syncMatches() {
 export async function processPicks(players) {
   const updated  = await getMatches()
   const finished = updated.filter(m => m.status === 'FINISHED' && m.winner)
+  const byId = new Map(finished.map(m => [m.id, m]))
   let processed = 0
 
   for (const player of players) {
@@ -236,14 +237,30 @@ export async function processPicks(players) {
       if (pick.team_name === 'no_pick') continue
 
       const cPick = canonName(pick.team_name)
-      const match = finished.find(m => {
-        if (toLocalDateISO(m.utc_date) !== pick.pick_date) return false
-        const cH = canonName(m.home_team), cA = canonName(m.away_team)
-        return cH === cPick || cA === cPick
-      })
+
+      // 1. Casa pelo match_id da própria pick (vínculo estável e correto).
+      //    A data (pick_date) NÃO é usada como chave: no mata-mata o utc_date
+      //    do jogo muda (re-sync, correção de fuso, adiamento) e diverge do
+      //    pick_date congelado na pick, fazendo a pick nunca casar e ficar
+      //    PENDING pra sempre, mesmo com o resultado já gravado no jogo.
+      let match = pick.match_id != null ? byId.get(pick.match_id) : null
+
+      // 2. Fallback legado: se a pick não tem match_id casável (ex.: picks
+      //    antigas), tenta por nome do time + data — o comportamento antigo.
+      if (!match) {
+        match = finished.find(m => {
+          if (toLocalDateISO(m.utc_date) !== pick.pick_date) return false
+          const cH = canonName(m.home_team), cA = canonName(m.away_team)
+          return cH === cPick || cA === cPick
+        })
+      }
       if (!match) continue
 
+      // Confere que o time da pick realmente joga nessa partida (protege contra
+      // match_id apontando pra jogo errado por resíduo de dado sujo).
       const cH = canonName(match.home_team), cA = canonName(match.away_team)
+      if (cH !== cPick && cA !== cPick) continue
+
       let result
       if (match.winner === 'DRAW') result = 'draw'
       else if (match.winner === 'HOME_TEAM') result = (cH === cPick) ? 'win' : 'loss'
