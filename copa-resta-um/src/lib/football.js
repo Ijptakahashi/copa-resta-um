@@ -290,13 +290,22 @@ export async function setMatchResultManual(homeTeam, awayTeam, homeScore, awaySc
       .update({ home_score: hs, away_score: as, winner, status: 'FINISHED' })
       .eq('id', m.id)
   }
+  // Determina o placar na orientação do jogo de referência (copies[0]),
+  // FORA do loop, pra estar em escopo no return. Antes, hs/as eram declarados
+  // com 'let' dentro do for e não existiam aqui — a função lançava
+  // ReferenceError APÓS já ter gravado o placar no banco, fazendo a UI mostrar
+  // "Erro" e não recarregar, dando a falsa impressão de que salvar/corrigir
+  // não funcionou (na verdade o banco era atualizado a cada tentativa).
   const match = copies[0]
+  const refH = canonName(match.home_team)
+  const refHs = refH === cA ? awayScore : homeScore
+  const refAs = refH === cA ? homeScore : awayScore
 
   // Reprocessa picks e no-picks
   await syncResults(players)
   const ms = await getMatches()
   await processNoPicks(players, ms)
-  return { match: `${match.home_team} ${hs}-${as} ${match.away_team}` }
+  return { match: `${match.home_team} ${refHs}-${refAs} ${match.away_team}` }
 }
 
 // ─── Sem pick = perde vida ────────────────────────────────────
