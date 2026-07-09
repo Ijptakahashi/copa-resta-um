@@ -15,7 +15,7 @@ import Navbar from './components/Navbar'
 import InstallButton from './components/InstallButton'
 import './index.css'
 
-function ProfileById({ player }) {
+function ProfileByIde({ player }) {
   const { id } = useParams()
   return <Profile player={player} viewPlayerId={id}/>
 }
