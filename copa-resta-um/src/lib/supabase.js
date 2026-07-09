@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { canonTeam } from './gameLogic'
 import { sideOfTeam } from './r32bracket'
 import { sideOfTeamR16 } from './r16bracket'
-import { isInR8 } from './r8bracket'
+import { isInR8, R8_BRACKET } from './r8bracket'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -29,6 +29,15 @@ function fixedTeamId(name) {
   for (let i = 0; i < name.length; i++) h = ((h << 5) + h) + name.charCodeAt(i)
   return Math.abs(h) % 9000 + 1000
 }
+
+const QF_FIXED_MATCHES = R8_BRACKET.map(m => ({
+  id: m.id,
+  home_team: m.home,
+  away_team: m.away,
+  utc_date: m.utc_date,
+}))
+
+let qfMatchesEnsured = false
 
 let r16MatchesEnsured = false
 
@@ -78,6 +87,35 @@ async function ensureR16Matches() {
     console.warn('ensureR16Matches falhou:', e.message)
   } finally {
     r16MatchesEnsured = true
+  }
+}
+
+
+async function ensureQfMatches() {
+  if (qfMatchesEnsured) return
+  try {
+    const ids = QF_FIXED_MATCHES.map(m=>m.id)
+    const { data: existing } = await supabase.from('matches').select('id').in('id', ids)
+    const existingIds = new Set((existing||[]).map(m=>m.id))
+    for (const fx of QF_FIXED_MATCHES){
+      const row={
+        id:fx.id,
+        home_team:fx.home_team,
+        away_team:fx.away_team,
+        home_team_id:fixedTeamId(fx.home_team),
+        away_team_id:fixedTeamId(fx.away_team),
+        utc_date:fx.utc_date,
+        stage:'QUARTER_FINALS',
+        group_name:null,
+      }
+      if(existingIds.has(fx.id)){
+        await supabase.from('matches').update(row).eq('id',fx.id)
+      } else {
+        await supabase.from('matches').insert({...row,status:'SCHEDULED',home_score:null,away_score:null,winner:null})
+      }
+    }
+  } finally {
+    qfMatchesEnsured=true
   }
 }
 
@@ -150,7 +188,10 @@ export async function getMatches() {
   // seed; passou disso, segue e lê os matches assim mesmo.
   try {
     await Promise.race([
-      ensureR16Matches(),
+      Promise.all([
+        ensureR16Matches(),
+        ensureQfMatches(),
+      ]),
       new Promise(resolve => setTimeout(resolve, 4000)),
     ])
   } catch (_) { /* seed é best-effort; nunca bloqueia a leitura */ }
