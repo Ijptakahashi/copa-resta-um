@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { canonTeam } from './gameLogic'
 import { sideOfTeam } from './r32bracket'
 import { sideOfTeamR16 } from './r16bracket'
+import { isInR8 } from './r8bracket'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -372,6 +373,76 @@ export async function removeR16PickByMatch(playerId, matchId) {
   if (processed) throw new Error('Esta pick já foi processada e não pode mais ser removida.')
   const { error } = await supabase.from('picks').delete().in('id', data.map(p => p.id))
   if (error) throw error
+}
+
+// ─── Quartas (QF): 1 pick ÚNICO na fase, sem lados ───
+export async function submitQfPick({ playerId, matchId, teamName, phase, pickDate }) {
+  if (!isInR8(teamName, canonTeam)) {
+    throw new Error(`${teamName} não está no chaveamento das quartas.`)
+  }
+
+  const { data: knockoutPicks, error: koErr } = await supabase
+    .from('picks').select('id, team_name, phase, match_id')
+    .eq('player_id', playerId).neq('phase', 'groups').neq('team_name', 'no_pick')
+  if (koErr) throw koErr
+
+  const cTeam = canonTeam(teamName)
+  // Não repetir seleção usada em fase anterior do mata-mata.
+  if ((knockoutPicks || []).some(p =>
+        p.phase !== 'qf' && canonTeam(p.team_name) === cTeam)) {
+    throw new Error(`${teamName} já foi escolhida em outra fase do mata-mata. Não pode repetir.`)
+  }
+
+  // Máximo 1 pick na fase 'qf' (excluindo a pick deste mesmo jogo, que é troca).
+  const qfCountNow = (knockoutPicks || []).filter(p =>
+    p.phase === 'qf' && p.match_id !== matchId).length
+  if (qfCountNow >= 1) {
+    throw new Error('Você já escolheu sua seleção das quartas. Remova-a antes de escolher outra.')
+  }
+
+  const { data: existing, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'qf')
+    .maybeSingle()
+  if (readError && readError.code !== 'PGRST116') throw readError
+  if (existing && existing.result !== null && existing.result !== undefined) {
+    throw new Error('Esta pick já foi processada e não pode mais ser alterada.')
+  }
+
+  if (existing) {
+    const { error } = await supabase.from('picks')
+      .update({ team_name: teamName, team_id: 0, phase, pick_date: pickDate, is_repeat: false })
+      .eq('id', existing.id)
+      .is('result', null)
+    if (error) throw error
+    return
+  }
+
+  const { error } = await supabase.from('picks').insert({
+    player_id: playerId, match_id: matchId, team_name: teamName,
+    team_id: 0, phase, pick_date: pickDate, is_repeat: false,
+  })
+  if (error) throw error
+}
+
+export async function removeQfPickByMatch(playerId, matchId) {
+  const { data, error: readError } = await supabase
+    .from('picks').select('id, result')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'qf')
+  if (readError) throw readError
+  if (!data || !data.length) return
+  const processed = data.find(p => p.result !== null && p.result !== undefined)
+  if (processed) throw new Error('Esta pick já foi processada e não pode mais ser removida.')
+  const { error } = await supabase.from('picks').delete().in('id', data.map(p => p.id))
+  if (error) throw error
+
+  const { data: stillThere, error: verifyErr } = await supabase
+    .from('picks').select('id')
+    .eq('player_id', playerId).eq('match_id', matchId).eq('phase', 'qf')
+  if (verifyErr) throw verifyErr
+  if (stillThere && stillThere.length > 0) {
+    throw new Error('A remoção não foi salva no banco (possível bloqueio de permissão). Tente novamente ou avise o organizador.')
+  }
 }
 
 // Remove a pick de R32 de um JOGO específico (match_id) — chave correta no MM,
