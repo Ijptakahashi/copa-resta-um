@@ -282,71 +282,70 @@ export default function Dashboard({ player }) {
 
   async function load() {
     setLoading(true)
-    const [pp, allMs, aPickS, players] = await Promise.all([
-      getPlayerPicks(player.id), getMatches(), getAllPicks(), getPlayers()
-    ])
-    setPicks(pp); setAllP(players); setAllPicks(aPickS)
-    const dayMs = allMs.filter(m => toLocalDateISO(m.utc_date) === today)
-    setTodayMs(dayMs)
-    setTP(pp.find(p => p.pick_date === today) || null)
-    const upcoming = allMs
-      .filter(m => m.status==='SCHEDULED' && new Date(m.utc_date) > new Date())
-      .sort((a,b) => new Date(a.utc_date)-new Date(b.utc_date))[0]
-    setNM(upcoming || null)
-    const ranked = players.map(p => {
-      const pp2 = aPickS.filter(pk => pk.player_id===p.id)
-      const {lives} = computeLives(pp2)
-      const correct = pp2.filter(pk => pk.result==='win').length
-      return {...p, lives, correct, eliminated:lives<=0}
-    }).sort((a,b) => b.lives-a.lives||b.correct-a.correct)
-    setLeaders(ranked.slice(0,5))
+    try {
+      const [pp, allMs, aPickS, players] = await Promise.all([
+        getPlayerPicks(player.id), getMatches(), getAllPicks(), getPlayers()
+      ])
+      setPicks(pp); setAllP(players); setAllPicks(aPickS)
+      const dayMs = allMs.filter(m => toLocalDateISO(m.utc_date) === today)
+      setTodayMs(dayMs)
+      setTP(pp.find(p => p.pick_date === today) || null)
+      const upcoming = allMs
+        .filter(m => m.status==='SCHEDULED' && new Date(m.utc_date) > new Date())
+        .sort((a,b) => new Date(a.utc_date)-new Date(b.utc_date))[0]
+      setNM(upcoming || null)
+      const ranked = players.map(p => {
+        const pp2 = aPickS.filter(pk => pk.player_id===p.id)
+        const {lives} = computeLives(pp2)
+        const correct = pp2.filter(pk => pk.result==='win').length
+        return {...p, lives, correct, eliminated:lives<=0}
+      }).sort((a,b) => b.lives-a.lives||b.correct-a.correct)
+      setLeaders(ranked.slice(0,5))
 
-    // Detecta fase ativa do mata-mata.
-    // ANCORA nos deadlines fixos (fonte de verdade), NÃO em "há jogos futuros
-    // de fase anterior" — que é frágil: uma única linha placeholder mal
-    // classificada (ex.: 'L101 x L102' marcada GROUP_STAGE com data no futuro,
-    // ou stage nulo) derrubava a detecção e revertia o app pra UI de grupos.
-    const hasR32Games = allMs.some(m => m.stage === 'ROUND_OF_32')
-    const hasR16Games = allMs.some(m => m.stage === 'ROUND_OF_16')
-    const hasQfGames  = allMs.some(m => m.stage === 'QUARTER_FINALS')
+      // Detecta fase ativa do mata-mata. ANCORA nos deadlines fixos.
+      const hasR32Games = allMs.some(m => m.stage === 'ROUND_OF_32')
+      const hasR16Games = allMs.some(m => m.stage === 'ROUND_OF_16')
+      const hasQfGames  = allMs.some(m => m.stage === 'QUARTER_FINALS')
 
-    // Fase mais avançada cujo mercado já fechou vence: QF > R16 > R32.
-    const qfActive  = hasQfGames && !isQfOpen(allMs)
-    const r16Active = !qfActive && hasR16Games && !isR16Open(allMs)
-    const r32Active = !qfActive && !r16Active && hasR32Games && !isR32Open(allMs)
-    setIsR32(qfActive || r16Active || r32Active)
-    if (qfActive) {
-      const qfPicks = pp.filter(p => p.phase === 'qf' && p.team_name !== 'no_pick')
-      // QF é pick único, sem lados. Reaproveita o card de progresso como "1/1".
-      setR32Counts({ left: qfPicks.length >= 1 ? 1 : 0, right: 0 })
-      setR32Dl(qfDeadline(allMs))
-      setR32OpenSt(isQfOpen(allMs))
-      setKnockoutPhase('qf')
-      setKnockoutPhaseLabel('Quartas')
-      setKnockoutMaxPerSide(1)
-    } else if (r16Active) {
-      const r16Picks = pp.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
-      const left  = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'left').length
-      const right = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'right').length
-      setR32Counts({ left, right })
-      setR32Dl(r16Deadline(allMs))
-      setR32OpenSt(isR16Open(allMs))
-      setKnockoutPhase('r16')
-      setKnockoutPhaseLabel('R16')
-      setKnockoutMaxPerSide(1)
-    } else if (r32Active) {
-      const r32Picks = pp.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
-      const left  = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left').length
-      const right = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right').length
+      // Fase mais avançada cujo mercado já fechou vence: QF > R16 > R32.
+      const qfActive  = hasQfGames && !isQfOpen(allMs)
+      const r16Active = !qfActive && hasR16Games && !isR16Open(allMs)
+      const r32Active = !qfActive && !r16Active && hasR32Games && !isR32Open(allMs)
+      setIsR32(qfActive || r16Active || r32Active)
+      if (qfActive) {
+        const qfPicks = pp.filter(p => p.phase === 'qf' && p.team_name !== 'no_pick')
+        setR32Counts({ left: qfPicks.length >= 1 ? 1 : 0, right: 0 })
+        setR32Dl(qfDeadline(allMs))
+        setR32OpenSt(isQfOpen(allMs))
+        setKnockoutPhase('qf')
+        setKnockoutPhaseLabel('Quartas')
+        setKnockoutMaxPerSide(1)
+      } else if (r16Active) {
+        const r16Picks = pp.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
+        const left  = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'left').length
+        const right = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'right').length
+        setR32Counts({ left, right })
+        setR32Dl(r16Deadline(allMs))
+        setR32OpenSt(isR16Open(allMs))
+        setKnockoutPhase('r16')
+        setKnockoutPhaseLabel('R16')
+        setKnockoutMaxPerSide(1)
+      } else if (r32Active) {
+        const r32Picks = pp.filter(p => p.phase === 'r32' && p.team_name !== 'no_pick')
+        const left  = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'left').length
+        const right = r32Picks.filter(p => sideOfTeamShared(p.team_name, canonTeam) === 'right').length
       setR32Counts({ left, right })
       setR32Dl(r32Deadline(allMs))
       setR32OpenSt(isR32Open(allMs))
       setKnockoutPhase('r32')
-      setKnockoutPhaseLabel('R32')
-      setKnockoutMaxPerSide(2)
+        setKnockoutPhaseLabel('R32')
+        setKnockoutMaxPerSide(2)
+      }
+    } catch (e) {
+      console.error('Dashboard load() falhou:', e)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   async function handleSync() {
