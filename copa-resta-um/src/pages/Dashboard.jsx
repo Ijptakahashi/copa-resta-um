@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { getPlayerPicks, getMatches, getAllPicks, getPlayers } from '../lib/supabase'
 import { computeLives, todayBrasilia, toLocalDateISO, isPickOpen,
-         pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, canonTeam } from '../lib/gameLogic'
+         pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, canonTeam } from '../lib/gameLogic'
 import { sideOfTeam as sideOfTeamShared } from '../lib/r32bracket'
 import { sideOfTeamR16 } from '../lib/r16bracket'
 import { ShieldIcon } from '../components/ShieldLives'
@@ -174,11 +174,11 @@ function KnockoutCasualties({ allPlayers, allPicks, phase='r32', label='R32' }) 
 function KnockoutPicksReveal({ allPlayers, allPicks, open, deadline, phase='r32', label='R32' }) {
   if (!allPlayers.length) return null
   const revealed = !open
-  const maxPerSide = phase === 'r16' ? 1 : 2
   const sideFn = phase === 'r16' ? sideOfTeamR16 : sideOfTeamShared
 
   function slotsFor(playerId) {
     const picks = allPicks.filter(p => p.player_id === playerId && p.phase === phase && p.team_name !== 'no_pick')
+    if (phase === 'qf') return [picks[0]]   // pick única, sem lados
     const left  = picks.filter(p => sideFn(p.team_name, canonTeam) === 'left')
     const right = picks.filter(p => sideFn(p.team_name, canonTeam) === 'right')
     if (phase === 'r16') return [left[0], right[0]]
@@ -308,12 +308,23 @@ export default function Dashboard({ player }) {
     // ou stage nulo) derrubava a detecção e revertia o app pra UI de grupos.
     const hasR32Games = allMs.some(m => m.stage === 'ROUND_OF_32')
     const hasR16Games = allMs.some(m => m.stage === 'ROUND_OF_16')
+    const hasQfGames  = allMs.some(m => m.stage === 'QUARTER_FINALS')
 
-    // Fase mais avançada cujo mercado já fechou vence. R16 tem prioridade sobre R32.
-    const r16Active = hasR16Games && !isR16Open(allMs)
-    const r32Active = !r16Active && hasR32Games && !isR32Open(allMs)
-    setIsR32(r16Active || r32Active)
-    if (r16Active) {
+    // Fase mais avançada cujo mercado já fechou vence: QF > R16 > R32.
+    const qfActive  = hasQfGames && !isQfOpen(allMs)
+    const r16Active = !qfActive && hasR16Games && !isR16Open(allMs)
+    const r32Active = !qfActive && !r16Active && hasR32Games && !isR32Open(allMs)
+    setIsR32(qfActive || r16Active || r32Active)
+    if (qfActive) {
+      const qfPicks = pp.filter(p => p.phase === 'qf' && p.team_name !== 'no_pick')
+      // QF é pick único, sem lados. Reaproveita o card de progresso como "1/1".
+      setR32Counts({ left: qfPicks.length >= 1 ? 1 : 0, right: 0 })
+      setR32Dl(qfDeadline(allMs))
+      setR32OpenSt(isQfOpen(allMs))
+      setKnockoutPhase('qf')
+      setKnockoutPhaseLabel('Quartas')
+      setKnockoutMaxPerSide(1)
+    } else if (r16Active) {
       const r16Picks = pp.filter(p => p.phase === 'r16' && p.team_name !== 'no_pick')
       const left  = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'left').length
       const right = r16Picks.filter(p => sideOfTeamR16(p.team_name, canonTeam) === 'right').length
@@ -398,7 +409,8 @@ export default function Dashboard({ player }) {
 
       {/* Mata-mata: indicador de progresso por lado, OU Today's Pick (fase de grupos) */}
       {isR32Phase ? (
-        <div className="fade-up fade-up-2" onClick={()=>navigate('/pick')}
+        <div className="fade-up fade-up-2"
+          onClick={()=>navigate(knockoutPhase==='qf'?'/qf':knockoutPhase==='r16'?'/r16':'/r32')}
           style={{background:'#fff',borderRadius:16,padding:'16px',marginBottom:12,cursor:'pointer',
           border:'1px solid rgba(0,0,0,.07)',boxShadow:'0 2px 12px rgba(0,0,0,.05)'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
@@ -407,6 +419,18 @@ export default function Dashboard({ player }) {
             {!r32Open && <span style={{fontFamily:'Sora',fontSize:9,fontWeight:700,color:'#1A3D28',
               background:'#EBF5EE',padding:'3px 8px',borderRadius:12}}>FECHADO</span>}
           </div>
+          {knockoutPhase==='qf' ? (
+            <div style={{background: r32Counts.left>=1?'rgba(201,164,74,.08)':'#F8F4EE',
+              borderRadius:12,padding:'14px',textAlign:'center',
+              border:`1.5px solid ${r32Counts.left>=1?'rgba(201,164,74,.35)':'rgba(0,0,0,.06)'}`}}>
+              <div style={{fontFamily:'Sora',fontWeight:700,fontSize:9,letterSpacing:'.08em',
+                color:'#9A9384',marginBottom:4}}>SUA SELEÇÃO</div>
+              <div style={{fontFamily:'Sora',fontWeight:800,fontSize:22,
+                color:r32Counts.left>=1?'#A07830':'#1A3D28'}}>{r32Counts.left>=1?'1/1':'0/1'}</div>
+              {r32Counts.left>=1 && <div style={{fontFamily:'Sora',fontSize:8,fontWeight:700,color:'#A07830',
+                marginTop:2,letterSpacing:'.04em'}}>✓ CONFIRMADO</div>}
+            </div>
+          ) : (
           <div style={{display:'flex',gap:10}}>
             {[['ESQUERDO', r32Counts.left],['DIREITO', r32Counts.right]].map(([label,cnt])=>(
               <div key={label} style={{flex:1,background: cnt===knockoutMaxPerSide?'rgba(201,164,74,.08)':'#F8F4EE',
@@ -421,9 +445,10 @@ export default function Dashboard({ player }) {
               </div>
             ))}
           </div>
+          )}
           {r32Open && r32Dl && (
             <div style={{textAlign:'center',fontSize:11,color:'#9CA3AF',marginTop:10,fontFamily:'Inter'}}>
-              Toque para escolher suas seleções
+              Toque para escolher sua seleção
             </div>
           )}
         </div>
