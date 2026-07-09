@@ -381,3 +381,36 @@ export function isR16Open(allMatches) {
   if (!dl) return true
   return new Date() < dl
 }
+
+export function qfDeadline(allMatches) {
+  // Fechamento das quartas: 30min antes do 1º jogo (França x Marrocos,
+  // 2026-07-09 20:00Z) => 2026-07-09T19:30:00Z. Fixo para não depender de
+  // como a fonte externa cadastrou a data (que já mudou entre syncs).
+  return new Date('2026-07-09T19:30:00.000Z')
+}
+
+export function isQfOpen(allMatches) {
+  const dl = qfDeadline(allMatches)
+  if (!dl) return true
+  return new Date() < dl
+}
+
+// Quartas: 1 pick ÚNICO entre as 8 seleções, sem lados.
+// - Não pode repetir seleção usada em qualquer fase anterior do mata-mata.
+// - Não pode ter mais de 1 pick na fase (qfPicksCount é quantas o jogador já
+//   tem em 'qf', excluindo a pick deste mesmo jogo se for troca).
+export function validateQfPick(allKnockoutPicks, teamName, qfPicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && p.phase !== 'qf' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida em outra fase do mata-mata. Não pode repetir.` }
+  }
+
+  if (qfPicksCount >= 1) {
+    return { valid: false, reason: 'Você já escolheu sua seleção das quartas. Toque nela para trocar.' }
+  }
+
+  return { valid: true }
+}
