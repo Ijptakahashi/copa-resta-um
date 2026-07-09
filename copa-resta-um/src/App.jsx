@@ -10,6 +10,7 @@ import Chat from './pages/Chat'
 import Admin from './pages/Admin'
 import R32Pick from './pages/R32Pick'
 import R16Pick from './pages/R16Pick'
+import R8Pick from './pages/R8Pick'
 import Navbar from './components/Navbar'
 import InstallButton from './components/InstallButton'
 import './index.css'
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="/admin"       element={<Admin player={player}/>}/>
           <Route path="/r32"         element={<R32Pick player={player}/>}/>
           <Route path="/r16"         element={<R16Pick player={player}/>}/>
+          <Route path="/qf"          element={<R8Pick player={player}/>}/>
           <Route path="*"            element={<Navigate to="/dashboard" replace/>}/>
         </Routes>
       </main>
