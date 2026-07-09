@@ -1,9 +1,10 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, canonTeam } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, canonTeam } from './gameLogic'
 import { R32_BRACKET, sideOfTeam } from './r32bracket'
 import { sideOfTeamR16 } from './r16bracket'
+import { R8_BRACKET, isInR8 } from './r8bracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -480,6 +481,53 @@ export async function processR16Penalties(players) {
       } catch (e) {
         console.warn(`processR16Penalties: falhou para player ${player.id}:`, e.message)
       }
+    }
+  }
+  return penalized
+}
+
+// ─── Penalidades das Quartas (QF) ────────────────────────────────
+// Regra: 1 pick ÚNICO na fase. Sem pick no fechamento = -1 vida.
+export async function processQfPenalties(players) {
+  const allMatches = await getMatches()
+  if (isQfOpen(allMatches)) return 0   // mercado ainda aberto
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const qfPicks = picks.filter(p => p.phase === 'qf' && p.team_name !== 'no_pick')
+
+    // Overflow (2+): estado de erro — neutraliza e trata como falta.
+    if (qfPicks.length > 1) {
+      for (const p of qfPicks) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    const hasValid = qfPicks.length === 1
+    const missing = hasValid ? 0 : 1
+    if (missing === 0) continue
+
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'qf' && p.team_name === 'no_pick').length
+    if (alreadyPenalized >= 1) continue   // idempotente: já penalizado
+
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeQfMatch = allMatches.find(m =>
+      m.stage === 'QUARTER_FINALS' && !usedMatchIds.has(m.id))
+    if (!freeQfMatch) {
+      console.warn(`processQfPenalties: sem match_id livre para player ${player.id}`)
+      continue
+    }
+    try {
+      const { error } = await supabase.from('picks').insert({
+        player_id: player.id, match_id: freeQfMatch.id, team_name: 'no_pick',
+        team_id: 0, phase: 'qf', pick_date: toLocalDateISO(freeQfMatch.utc_date),
+        is_repeat: false, result: 'no_pick', lives_lost: 1,
+      })
+      if (!error) penalized++
+      else console.warn('processQfPenalties insert error:', error.message)
+    } catch (e) {
+      console.warn(`processQfPenalties: falhou para player ${player.id}:`, e.message)
     }
   }
   return penalized
