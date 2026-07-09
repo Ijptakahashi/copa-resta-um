@@ -128,18 +128,20 @@ export default function R8Pick({ player }) {
     p => p.phase && p.phase !== 'groups' && p.team_name !== 'no_pick'
   )
 
-  function findMatchRecord(home, away) {
+  function findMatchRecord(home, away, bracketId) {
+    // 1. Casa pelo id do bracket (estável, imune a grafia). É o caminho certo:
+    //    o R8_BRACKET já traz o id de cada jogo.
+    if (bracketId != null) {
+      const byId = matches.find(m => m.id === bracketId)
+      if (byId) return byId
+    }
+    // 2. Fallback por nome canônico (caso o id do banco divirja do bracket).
     const cH = canonTeam(home)
     const cA = canonTeam(away)
-
     return matches.find(m => {
       const mh = canonTeam(m.home_team)
       const ma = canonTeam(m.away_team)
-
-      return (
-        (mh === cH && ma === cA) ||
-        (mh === cA && ma === cH)
-      )
+      return (mh === cH && ma === cA) || (mh === cA && ma === cH)
     })
   }
 
@@ -482,7 +484,7 @@ export default function R8Pick({ player }) {
         )}
 
         {R8_BRACKET.map((m, idx) => {
-          const rec = findMatchRecord(m.home, m.away)
+          const rec = findMatchRecord(m.home, m.away, m.id)
           const pending = !rec
           const currentPick = !pending && pickForMatch(m.home, m.away)
 
