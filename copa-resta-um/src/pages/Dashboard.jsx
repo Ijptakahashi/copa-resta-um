@@ -283,8 +283,17 @@ export default function Dashboard({ player }) {
   async function load() {
     setLoading(true)
     try {
+      // Timeout global: se QUALQUER query pendurar (não erra, não resolve), a
+      // tela não pode ficar presa em "Carregando" pra sempre. 8s e segue com o
+      // que veio (ou vazio), deixando o app abrir em vez de travar.
+      const withTimeout = (p, ms, fallback) => Promise.race([
+        p, new Promise(r => setTimeout(() => r(fallback), ms)),
+      ])
       const [pp, allMs, aPickS, players] = await Promise.all([
-        getPlayerPicks(player.id), getMatches(), getAllPicks(), getPlayers()
+        withTimeout(getPlayerPicks(player.id), 8000, []),
+        withTimeout(getMatches(),             8000, []),
+        withTimeout(getAllPicks(),            8000, []),
+        withTimeout(getPlayers(),             8000, []),
       ])
       setPicks(pp); setAllP(players); setAllPicks(aPickS)
       const dayMs = allMs.filter(m => toLocalDateISO(m.utc_date) === today)
