@@ -163,7 +163,15 @@ export function canonTeam(n='') {
     'usa':'united states','united states of america':'united states','u.s.a.':'united states',
     'türkiye':'turkey','turkiye':'turkey','curaçao':'curacao','congo dr':'dr congo',
     'côte d’ivoire':'ivory coast',"côte d'ivoire":'ivory coast',"cote d'ivoire":'ivory coast',
-    'ir iran':'iran'}
+    'ir iran':'iran',
+    // Sinônimos PT/EN das seleções (fonte externa às vezes vem em português).
+    // Sem isto, 'Suíça' != 'switzerland' e o jogo some da tela (fica PENDENTE).
+    'suíça':'switzerland','suica':'switzerland','suíssa':'switzerland',
+    'inglaterra':'england','frança':'france','franca':'france','marrocos':'morocco',
+    'espanha':'spain','bélgica':'belgium','belgica':'belgium','noruega':'norway',
+    'argentina':'argentina','brasil':'brazil','méxico':'mexico','mexico':'mexico',
+    'alemanha':'germany','portugal':'portugal','colômbia':'colombia','colombia':'colombia',
+    'estados unidos':'united states','egito':'egypt'}
   const s=String(n).toLowerCase().trim(); return map[s]||s
 }
 
@@ -383,10 +391,9 @@ export function isR16Open(allMatches) {
 }
 
 export function qfDeadline(allMatches) {
-  // Fechamento das quartas: 30min antes do 1º jogo (França x Marrocos,
-  // 2026-07-09 20:00Z) => 2026-07-09T19:30:00Z. Fixo para não depender de
-  // como a fonte externa cadastrou a data (que já mudou entre syncs).
-  return new Date('2026-07-09T19:30:00.000Z')
+  // Fechamento das quartas: 16:55 no horário de Brasília (BRT, UTC-3) =
+  // 2026-07-09T19:55:00Z. Fixo, não depende da fonte externa.
+  return new Date('2026-07-09T19:55:00.000Z')
 }
 
 export function isQfOpen(allMatches) {
