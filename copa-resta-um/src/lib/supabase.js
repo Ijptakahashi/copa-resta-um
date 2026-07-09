@@ -143,7 +143,18 @@ export async function addPlayer(name) {
 
 // ─── Matches ──────────────────────────────────────────────────
 export async function getMatches() {
-  await ensureR16Matches()
+  // ensureR16Matches escreve no banco (seed dos fixtures de oitavas). Se um
+  // desses writes travar (RLS, constraint, rede), NÃO pode segurar a leitura —
+  // senão getMatches nunca retorna e TODA aba que carrega dados fica presa em
+  // "Carregando" pra sempre. Blindamos com timeout: no máximo 4s esperando o
+  // seed; passou disso, segue e lê os matches assim mesmo.
+  try {
+    await Promise.race([
+      ensureR16Matches(),
+      new Promise(resolve => setTimeout(resolve, 4000)),
+    ])
+  } catch (_) { /* seed é best-effort; nunca bloqueia a leitura */ }
+
   const { data, error } = await supabase.from('matches').select('*').order('utc_date')
   if (error) throw error
   return data
