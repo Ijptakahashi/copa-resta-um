@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, RefreshCw, Check } from 'lucide-react'
 import { getMatches, getPlayers } from '../lib/supabase'
-import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks, processR32Penalties, processR16Penalties, processQfPenalties } from '../lib/football'
+import { setMatchResultManual, syncMatches, syncResults, processNoPicks, processPicks, processR32Penalties, processR16Penalties, processQfPenalties, processSfPenalties } from '../lib/football'
 import { toLocalDateISO } from '../lib/gameLogic'
 
 // Normaliza nomes p/ deduplicar jogos iguais com grafias diferentes
@@ -55,6 +55,7 @@ export default function Admin({ player }) {
       await processR32Penalties(players)
       await processR16Penalties(players)
       await processQfPenalties(players)
+      await processSfPenalties(players)
       setMsg(`✓ Salvo: ${r.match}`)
       // Limpa o state local desse jogo pra próxima edição ler do banco atualizado
       setScores(prev => { const n = {...prev}; delete n[m.id]; return n })
@@ -72,7 +73,8 @@ export default function Admin({ player }) {
       const r32n = await processR32Penalties(players)
       const r16n = await processR16Penalties(players)
       const qfn  = await processQfPenalties(players)
-      setMsg(`✓ ${n} pick(s) processada(s)!` + (r32n ? ` ${r32n} pen. R32.` : '') + (r16n ? ` ${r16n} pen. R16.` : '') + (qfn ? ` ${qfn} pen. quartas.` : ''))
+      const sfn  = await processSfPenalties(players)
+      setMsg(`✓ ${n} pick(s) processada(s)!` + (r32n ? ` ${r32n} pen. R32.` : '') + (r16n ? ` ${r16n} pen. R16.` : '') + (qfn ? ` ${qfn} pen. quartas.` : '') + (sfn ? ` ${sfn} pen. semis.` : ''))
       await load()
     } catch(e) { setMsg('Erro: ' + e.message) }
     finally { setBusy(false) }
@@ -97,6 +99,7 @@ export default function Admin({ player }) {
       await processR32Penalties(players)
       await processR16Penalties(players)
       await processQfPenalties(players)
+      await processSfPenalties(players)
       await load()
       setMsg('✓ Sincronização completa!')
     } catch(e) { setMsg('Erro: ' + e.message) }

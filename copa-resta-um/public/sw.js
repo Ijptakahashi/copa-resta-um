@@ -1,5 +1,5 @@
 // Versão do cache — MUDE este número a cada deploy importante pra forçar atualização
-const CACHE = 'copa-resta-um-v37'
+const CACHE = 'copa-resta-um-v38'
 
 self.addEventListener('install', e => {
   // Ativa o SW novo imediatamente, sem esperar fechar as abas

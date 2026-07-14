@@ -1,10 +1,11 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, canonTeam } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, sfDeadline, isSfOpen, canonTeam } from './gameLogic'
 import { R32_BRACKET, sideOfTeam } from './r32bracket'
 import { sideOfTeamR16 } from './r16bracket'
 import { R8_BRACKET, isInR8 } from './r8bracket'
+import { SF_BRACKET, isInSf } from './sfbracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -528,6 +529,52 @@ export async function processQfPenalties(players) {
       else console.warn('processQfPenalties insert error:', error.message)
     } catch (e) {
       console.warn(`processQfPenalties: falhou para player ${player.id}:`, e.message)
+    }
+  }
+  return penalized
+}
+
+// ─── Penalidades das Semifinais (SF) ────────────────────────────────
+// Regra: 1 pick ÚNICO na fase. Sem pick no fechamento = -1 vida.
+export async function processSfPenalties(players) {
+  const allMatches = await getMatches()
+  if (isSfOpen(allMatches)) return 0   // mercado ainda aberto
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const sfPicks = picks.filter(p => p.phase === 'sf' && p.team_name !== 'no_pick')
+
+    // Overflow (2+): estado de erro — neutraliza e trata como falta.
+    if (sfPicks.length > 1) {
+      for (const p of sfPicks) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    const hasValid = sfPicks.length === 1
+    if (hasValid) continue
+
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'sf' && p.team_name === 'no_pick').length
+    if (alreadyPenalized >= 1) continue   // idempotente
+
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeSfMatch = allMatches.find(m =>
+      m.stage === 'SEMI_FINALS' && !usedMatchIds.has(m.id))
+    if (!freeSfMatch) {
+      console.warn(`processSfPenalties: sem match_id livre para player ${player.id}`)
+      continue
+    }
+    try {
+      const { error } = await supabase.from('picks').insert({
+        player_id: player.id, match_id: freeSfMatch.id, team_name: 'no_pick',
+        team_id: 0, phase: 'sf', pick_date: toLocalDateISO(freeSfMatch.utc_date),
+        is_repeat: false, result: 'no_pick', lives_lost: 1,
+      })
+      if (!error) penalized++
+      else console.warn('processSfPenalties insert error:', error.message)
+    } catch (e) {
+      console.warn(`processSfPenalties: falhou para player ${player.id}:`, e.message)
     }
   }
   return penalized

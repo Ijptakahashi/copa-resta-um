@@ -14,6 +14,8 @@ import {
   isR16Open,
   qfDeadline,
   isQfOpen,
+  sfDeadline,
+  isSfOpen,
   canonTeam,
 } from '../lib/gameLogic'
 import { sideOfTeam as sideOfTeamR32 } from '../lib/r32bracket'
@@ -28,6 +30,7 @@ const PHASE_INFO = {
   r32: { label: 'R32', route: '/r32', reveal: 'PICKS DO R32', description: '2 picks no lado esquerdo + 2 picks no lado direito' },
   r16: { label: 'Oitavas', route: '/r16', reveal: 'PICKS DAS OITAVAS', description: '1 pick no lado esquerdo + 1 pick no lado direito' },
   qf: { label: 'Quartas', route: '/qf', reveal: 'PICKS DAS QUARTAS', description: '1 pick única na fase inteira — sem divisão por lados' },
+  sf: { label: 'Semifinais', route: '/sf', reveal: 'PICKS DAS SEMIS', description: '1 pick única na fase inteira — sem divisão por lados' },
 }
 
 function withTimeout(promise, ms, fallback) {
@@ -162,13 +165,16 @@ function SectionTitle({ children, right }) {
 }
 
 function phaseFromMatchesAndPicks(matches, playerPicks) {
+  const hasSf = matches.some(m => m.stage === 'SEMI_FINALS')
   const hasQf = matches.some(m => m.stage === 'QUARTER_FINALS')
   const hasR16 = matches.some(m => m.stage === 'ROUND_OF_16')
   const hasR32 = matches.some(m => m.stage === 'ROUND_OF_32')
+  const pickedSf = playerPicks.some(p => p.phase === 'sf')
   const pickedQf = playerPicks.some(p => p.phase === 'qf')
   const pickedR16 = playerPicks.some(p => p.phase === 'r16')
   const pickedR32 = playerPicks.some(p => p.phase === 'r32')
 
+  if (hasSf || pickedSf) return 'sf'
   if (hasQf || pickedQf) return 'qf'
   if (hasR16 && (!isR16Open(matches) || pickedR16)) return 'r16'
   if (hasR32 && (!isR32Open(matches) || pickedR32)) return 'r32'
@@ -176,6 +182,7 @@ function phaseFromMatchesAndPicks(matches, playerPicks) {
 }
 
 function deadlineForPhase(phase, matches, todayMatches) {
+  if (phase === 'sf') return sfDeadline(matches)
   if (phase === 'qf') return qfDeadline(matches)
   if (phase === 'r16') return r16Deadline(matches)
   if (phase === 'r32') return r32Deadline(matches)
@@ -183,6 +190,7 @@ function deadlineForPhase(phase, matches, todayMatches) {
 }
 
 function isPhaseOpen(phase, matches, todayMatches) {
+  if (phase === 'sf') return isSfOpen(matches)
   if (phase === 'qf') return isQfOpen(matches)
   if (phase === 'r16') return isR16Open(matches)
   if (phase === 'r32') return isR32Open(matches)
@@ -198,7 +206,7 @@ function sideForPick(phase, teamName) {
 function playerSlots(playerId, allPicks, phase) {
   const picks = allPicks.filter(p => p.player_id === playerId && p.phase === phase && p.team_name !== 'no_pick')
 
-  if (phase === 'qf') return [picks[0] || null]
+  if (phase === 'qf' || phase === 'sf') return [picks[0] || null]
 
   const left = picks.filter(p => sideForPick(phase, p.team_name) === 'left')
   const right = picks.filter(p => sideForPick(phase, p.team_name) === 'right')
@@ -241,7 +249,7 @@ function MyKnockoutCard({ phase, picks, open, onClick }) {
           const done = item.count >= item.max
           return (
             <div key={item.label} style={{
-              flex: phase === 'qf' ? '0 1 220px' : 1,
+              flex: (phase === 'qf' || phase === 'sf') ? '0 1 220px' : 1,
               background: done ? 'rgba(201,164,74,.08)' : '#F8F4EE',
               borderRadius: 12,
               padding: 14,
@@ -364,22 +372,22 @@ function PicksReveal({ phase, allPlayers, allPicks, open, deadline, today }) {
             : playerSlots(player.id, allPicks, phase)
 
           return (
-            <div key={player.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: phase === 'qf' ? 72 : 88, opacity: eliminated ? .6 : 1 }}>
+            <div key={player.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: (phase === 'qf' || phase === 'sf') ? 72 : 88, opacity: eliminated ? .6 : 1 }}>
               <Avatar name={player.name} photoUrl={player.avatar_url} size={34} ring={eliminated ? '#C4302B' : null} dim={eliminated} />
               <div style={{ fontFamily: 'Sora', fontWeight: 600, fontSize: 9, textAlign: 'center', color: '#6B6B6B', lineHeight: 1.2, width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {player.name}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, width: '100%' }}>
                 {slots.map((pick, index) => {
-                  const separator = !isGroups && phase !== 'qf' && ((phase === 'r16' && index === 1) || (phase === 'r32' && index === 2))
+                  const separator = !isGroups && phase !== 'qf' && phase !== 'sf' && ((phase === 'r16' && index === 1) || (phase === 'r32' && index === 2))
                   return (
                     <span key={index} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                       {separator && <span style={{ width: 1, height: 18, background: 'rgba(0,0,0,.12)' }} />}
                       {revealed && pick && pick.team_name !== 'no_pick' ? (
-                        <FlagBubble team={pick.team_name} size={phase === 'qf' ? 28 : 22} />
+                        <FlagBubble team={pick.team_name} size={(phase === 'qf' || phase === 'sf') ? 28 : 22} />
                       ) : (
                         <span style={{
-                          width: phase === 'qf' ? 28 : 22,
+                          width: (phase === 'qf' || phase === 'sf') ? 28 : 22,
                           height: phase === 'qf' ? 28 : 22,
                           borderRadius: '50%',
                           background: pick ? 'rgba(0,0,0,.15)' : 'rgba(0,0,0,.06)',

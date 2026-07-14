@@ -421,3 +421,34 @@ export function validateQfPick(allKnockoutPicks, teamName, qfPicksCount) {
 
   return { valid: true }
 }
+
+// ─── Semifinais (SF) ───
+export function sfDeadline(allMatches) {
+  // Fechamento das semis: 15:55 no horário de Brasília (BRT, UTC-3) =
+  // 2026-07-14T18:55:00Z. Fixo, não depende da fonte externa.
+  return new Date('2026-07-14T18:55:00.000Z')
+}
+
+export function isSfOpen(allMatches) {
+  const dl = sfDeadline(allMatches)
+  if (!dl) return true
+  return new Date() < dl
+}
+
+// Semis: 1 pick ÚNICO entre as 4 seleções, sem lados.
+// Não pode repetir seleção usada em qualquer fase anterior do mata-mata.
+export function validateSfPick(allKnockoutPicks, teamName, sfPicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && p.phase !== 'sf' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida em outra fase do mata-mata. Não pode repetir.` }
+  }
+
+  if (sfPicksCount >= 1) {
+    return { valid: false, reason: 'Você já escolheu sua seleção da semi. Toque nela para trocar.' }
+  }
+
+  return { valid: true }
+}
