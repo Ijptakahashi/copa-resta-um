@@ -220,7 +220,7 @@ function MyKnockoutCard({ phase, picks, open, onClick }) {
   const phasePicks = picks.filter(p => p.phase === phase && p.team_name !== 'no_pick')
 
   let content
-  if (phase === 'qf') {
+  if (phase === 'qf' || phase === 'sf') {
     content = [{ label: 'SUA SELEÇÃO', count: phasePicks.length ? 1 : 0, max: 1 }]
   } else {
     const left = phasePicks.filter(p => sideForPick(phase, p.team_name) === 'left').length
@@ -388,7 +388,7 @@ function PicksReveal({ phase, allPlayers, allPicks, open, deadline, today }) {
                       ) : (
                         <span style={{
                           width: (phase === 'qf' || phase === 'sf') ? 28 : 22,
-                          height: phase === 'qf' ? 28 : 22,
+                          height: (phase === 'qf' || phase === 'sf') ? 28 : 22,
                           borderRadius: '50%',
                           background: pick ? 'rgba(0,0,0,.15)' : 'rgba(0,0,0,.06)',
                           border: '1px solid rgba(0,0,0,.08)',
