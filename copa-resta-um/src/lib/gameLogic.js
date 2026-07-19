@@ -437,6 +437,36 @@ export function isSfOpen(allMatches) {
 
 // Semis: 1 pick ÚNICO entre as 4 seleções, sem lados.
 // Não pode repetir seleção usada em qualquer fase anterior do mata-mata.
+// ─── FINAL ───
+export function finalDeadline(allMatches) {
+  // Fechamento da final: 16:00 no horário de Brasília (BRT, UTC-3) =
+  // 2026-07-19T19:00:00Z. Fixo.
+  return new Date('2026-07-19T19:00:00.000Z')
+}
+
+export function isFinalOpen(allMatches) {
+  const dl = finalDeadline(allMatches)
+  if (!dl) return true
+  return new Date() < dl
+}
+
+// Final: 1 pick ÚNICA entre as 2 seleções.
+export function validateFinalPick(allKnockoutPicks, teamName, finalPicksCount) {
+  const cTeam = canonTeam(teamName)
+
+  const usedInKnockout = allKnockoutPicks.some(p =>
+    p.team_name !== 'no_pick' && p.phase !== 'final' && canonTeam(p.team_name) === cTeam)
+  if (usedInKnockout) {
+    return { valid: false, reason: `${teamName} já foi escolhida em outra fase do mata-mata. Não pode repetir.` }
+  }
+
+  if (finalPicksCount >= 1) {
+    return { valid: false, reason: 'Você já escolheu sua seleção da final. Toque nela para trocar.' }
+  }
+
+  return { valid: true }
+}
+
 export function validateSfPick(allKnockoutPicks, teamName, sfPicksCount) {
   const cTeam = canonTeam(teamName)
 

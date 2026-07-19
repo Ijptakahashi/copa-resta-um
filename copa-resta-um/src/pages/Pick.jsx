@@ -11,6 +11,7 @@ import R32Pick from './R32Pick'
 import R16Pick from './R16Pick'
 import R8Pick from './R8Pick'
 import SFPick from './SFPick'
+import FinalPick from './FinalPick'
 
 // Canonical name for robust deduplication
 function canon(n='') {
@@ -361,13 +362,15 @@ export default function Pick({ player }) {
       const { getMatches } = await import('../lib/supabase')
       const ms = await getMatches()
 
+      const hasFinal = ms.some(m => m.stage === 'FINAL')
       const hasSf  = ms.some(m => m.stage === 'SEMI_FINALS')
       const hasQf  = ms.some(m => m.stage === 'QUARTER_FINALS')
       const hasR16 = ms.some(m => m.stage === 'ROUND_OF_16')
       const hasR32 = ms.some(m => m.stage === 'ROUND_OF_32')
 
       if (!alive) return
-      if (hasSf) setPhaseMode('sf')
+      if (hasFinal) setPhaseMode('final')
+      else if (hasSf) setPhaseMode('sf')
       else if (hasQf) setPhaseMode('qf')
       else if (hasR16) setPhaseMode('r16')
       else if (hasR32) setPhaseMode('r32')
@@ -378,6 +381,7 @@ export default function Pick({ player }) {
   }, [])
 
   if (phaseMode === null) return <PickSkeleton/>
+  if (phaseMode === 'final') return <FinalPick player={player}/>
   if (phaseMode === 'sf')  return <SFPick player={player}/>
   if (phaseMode === 'qf')  return <R8Pick player={player}/>
   if (phaseMode === 'r16') return <R16Pick player={player}/>

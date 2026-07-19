@@ -12,6 +12,7 @@ import R32Pick from './pages/R32Pick'
 import R16Pick from './pages/R16Pick'
 import R8Pick from './pages/R8Pick'
 import SFPick from './pages/SFPick'
+import FinalPick from './pages/FinalPick'
 import Navbar from './components/Navbar'
 import InstallButton from './components/InstallButton'
 import './index.css'
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/r16"         element={<R16Pick player={player}/>}/>
           <Route path="/qf"          element={<R8Pick player={player}/>}/>
           <Route path="/sf"          element={<SFPick player={player}/>}/>
+          <Route path="/final"       element={<FinalPick player={player}/>}/>
           <Route path="*"            element={<Navigate to="/dashboard" replace/>}/>
         </Routes>
       </main>

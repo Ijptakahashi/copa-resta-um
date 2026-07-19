@@ -1,11 +1,12 @@
 // src/lib/football.js
 import { upsertMatches, getMatches, getPlayerPicks,
          updatePickResult, submitPick, supabase } from './supabase'
-import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, sfDeadline, isSfOpen, canonTeam } from './gameLogic'
+import { resolveResult, computeLivesLost, STAGE_TO_PHASE, toLocalDateISO, pickDeadline, r32Deadline, isR32Open, r16Deadline, isR16Open, qfDeadline, isQfOpen, sfDeadline, isSfOpen, finalDeadline, isFinalOpen, canonTeam } from './gameLogic'
 import { R32_BRACKET, sideOfTeam } from './r32bracket'
 import { sideOfTeamR16 } from './r16bracket'
 import { R8_BRACKET, isInR8 } from './r8bracket'
 import { SF_BRACKET, isInSf } from './sfbracket'
+import { FINAL_BRACKET, isInFinal } from './finalbracket'
 
 const OPENFOOTBALL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 const ESPN_BASE    = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'
@@ -576,6 +577,41 @@ export async function processSfPenalties(players) {
     } catch (e) {
       console.warn(`processSfPenalties: falhou para player ${player.id}:`, e.message)
     }
+  }
+  return penalized
+}
+
+export async function processFinalPenalties(players) {
+  const allMatches = await getMatches()
+  if (isFinalOpen(allMatches)) return 0
+
+  let penalized = 0
+  for (const player of players) {
+    const picks = await getPlayerPicks(player.id)
+    const finalPicks = picks.filter(p => p.phase === 'final' && p.team_name !== 'no_pick')
+
+    if (finalPicks.length > 1) {
+      for (const p of finalPicks) {
+        try { await supabase.from('picks').delete().eq('id', p.id) } catch (_) {}
+      }
+    }
+    if (finalPicks.length === 1) continue
+
+    const alreadyPenalized = picks.filter(p =>
+      p.phase === 'final' && p.team_name === 'no_pick').length
+    if (alreadyPenalized >= 1) continue
+
+    const usedMatchIds = new Set(picks.filter(p => p.match_id != null).map(p => p.match_id))
+    const freeMatch = allMatches.find(m => m.stage === 'FINAL' && !usedMatchIds.has(m.id))
+    if (!freeMatch) { console.warn(`processFinalPenalties: sem match_id livre para ${player.id}`); continue }
+    try {
+      const { error } = await supabase.from('picks').insert({
+        player_id: player.id, match_id: freeMatch.id, team_name: 'no_pick',
+        team_id: 0, phase: 'final', pick_date: toLocalDateISO(freeMatch.utc_date),
+        is_repeat: false, result: 'no_pick', lives_lost: 1,
+      })
+      if (!error) penalized++
+    } catch (e) { console.warn('processFinalPenalties:', e.message) }
   }
   return penalized
 }
